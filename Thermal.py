@@ -39,7 +39,7 @@ if __name__ == '__main__':
 	print("MLX addr detected on I2C")
 	print([hex(i) for i in mlx.serial_number])
 
-	mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_8_HZ
+	mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
 	frame = [0] * 768
 	mp.set_start_method('spawn')
 	q = mp.Queue()
@@ -55,21 +55,8 @@ if __name__ == '__main__':
     #p.join()
 	while True:
 		#stamp = time.monotonic()
-		try:
-			
+		try:			
 			mlx.getFrame(frame)
 			q.put(frame)
-			#print("Frame:")
-			#print(frame)
 		except ValueError:
-			# these happen, no biggie - retry
 			continue
-		#print("Read 2 frames in %0.2f s" % (time.monotonic() - stamp))
-		#for h in range(24):
-			#for w in range(32):
-				#t = frame[h * 32 + w]
-				#if PRINT_TEMPERATURES:
-					#print("%0.1f, " % t, end="")
-					#PRINT_TEMPERATURES
-			#print()
-		#print()
