@@ -8,24 +8,39 @@ import board
 import busio
 import adafruit_mlx90640
 import multiprocessing as mp
-from thermal_data import thermal_data 
+import ctypes
+from thermal_data import thermal_data
 
+packet_lib = ctypes.CDLL('./packet_class/packet.so')
+
+# Take thermal data, add GPS + alt data
 def data_structure_builder(q,q2):
 	while True:
 		if q.empty() == False:
 			thermal = thermal_data(q.get())
 			q2.put(thermal)
 
+# Find min + max of frames
 def data_processing(q2,q3):
 	while True:
 		if q2.empty() == False:
 			q3.put(q2.get())
 
-def results(q3):
+# Compartmentalize data in packet, serialize, and send
+def send_packet(q3):
 	while True:
 		if q3.empty() == False:
 			print("Data on thread 3")
-			print(q3.get().array)
+			data = q3.get()
+			
+			
+            # Call the cpp function with the data 
+			packet = packet_lib.create_packet(ctypes.c_uint(), (ctypes.c_float * 2)(*data.gps), ctypes.c_float(data.barometric), ctypes.c_float(data.max_temp), ctypes.c_float(data.min_temp))
+			
+            # packet data -> byte array, send over radio
+			byte_packet = bytes(packet.contents)
+			# send_radio(byte_packet) # IMPLEMENT MEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+			print('Packet sent: ', byte_packet)
 
 
 if __name__ == '__main__':
@@ -47,7 +62,7 @@ if __name__ == '__main__':
 	q3 = mp.Queue()
 	p = mp.Process(target=data_structure_builder, args=(q,q2,))
 	p2 = mp.Process(target=data_processing, args=(q2,q3,))
-	p3 = mp.Process(target=results, args=(q3,))
+	p3 = mp.Process(target=send_packet, args=(q3,))
 	p.start()
 	p2.start()
 	p3.start()
