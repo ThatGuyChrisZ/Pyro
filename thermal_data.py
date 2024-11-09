@@ -1,8 +1,9 @@
 class thermal_data:
     def Retrieve_Flight_Data:
-        self. gps = (34.246,25.7899)
+        self.gps = (34.246,25.7899)
         self.barometric = 1200
         self.compass = 0.00
+        
     def __init__(self, frame):
         self.max_temp = max(frame)
         self.min_temp = min(frame)
