@@ -9,7 +9,9 @@ import busio
 import adafruit_mlx90640
 import multiprocessing as mp
 import ctypes
+import pyserial # for serial communication over usb
 from thermal_data import thermal_data
+from '\packet_class\\_v2\\packet.py' import Packet
 
 packet_lib = ctypes.CDLL('./packet_class/packet.so')
 
