@@ -33,3 +33,10 @@ class Packet:
             ALTITUDE - {self.alt}\n \
             HIGH TEMP - {self.high_temp}\n \
             LOW TEMP - {self.low_temp}"
+
+
+# if __name__ == '__main__':
+#     my_packet = Packet(2002, [1.245, 4.246], 2846, 220, 35)
+#     print('packet successfully created!')
+    
+#     print(my_packet.serialize())
