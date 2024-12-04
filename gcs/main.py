@@ -30,7 +30,7 @@ def receive_and_decode_packets():
             computed_checksum = zlib.crc32(payload)
 
             if computed_checksum != received_checksum:
-                print("Checksum mismatch! Packet corrupted.")
+                print(f"Checksum mismatch! Packet corrupted. \\\\ COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}")
                 continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET

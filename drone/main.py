@@ -11,10 +11,13 @@ import sys
 import multiprocessing as mp
 # import ctypes
 import serial # for serial communication over usb
+import struct
+import zlib
 from thermal_data import thermal_data
 from radio.packet_class._v2.packet import Packet
 
 pac_id_to_create = 1 # Global variable for creating the next packet id
+UNSIGNED_INT_MAX = 2147483647
 
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
 rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=9600, timeout=1)
@@ -50,6 +53,11 @@ def create_packet(q3, q4):
                 low_temp=data.min_temp         # Min temperature
             )
 
+            if pac_id_to_create == UNSIGNED_INT_MAX:
+                pac_id_to_create = 1
+            else:
+                pac_id_to_create += 1
+
             # Serialize the Packet
             serialized_packet = packet.serialize()
             print(sys.getsizeof(serialized_packet))
@@ -63,8 +71,16 @@ def send_packet(q4):
             try:
                 rf_serial.write(serialized_packet)  # Send bytes over the RF module
                 print(f'Packet sent: {serialized_packet.hex()}')  # Print as hex for readability
+                #FOR DEBUGGING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                payload = serialized_packet[:-4]  # setting to all but the sum . . . 
+                received_checksum = struct.unpack('<I', serialized_packet[-4:])[0] # and here we check that sum
+                computed_checksum = zlib.crc32(payload)
+                print(f'~~~~~~~~~~CHECK COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}"')
+                #FOR DEBUGGING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             except serial.SerialException as e:
                 print(f"Failed to send packet: {e}")
+
+        time.sleep(1) # FOR DEBUGGING PURPOSES, ONLY SEND PACKET ONCE EVERY SECOND
 
 
 if __name__ == '__main__':
