@@ -20,7 +20,7 @@ pac_id_to_create = 1 # Global variable for creating the next packet id
 UNSIGNED_INT_MAX = 2147483647
 
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
-rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=9600, timeout=1)
+rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=9600, timeout=5, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 
 # Take thermal data, add GPS + alt data
 def data_structure_builder(q1,q2):
@@ -37,6 +37,8 @@ def data_processing(q2,q3):
 
 # Compartmentalize data in packet, serialize, and send
 def create_packet(q3, q4):
+    global pac_id_to_create
+
     while True:
         if not q3.empty():
             # print("Data on thread 3")
@@ -60,7 +62,6 @@ def create_packet(q3, q4):
 
             # Serialize the Packet
             serialized_packet = packet.serialize()
-            print(sys.getsizeof(serialized_packet))
             q4.put(serialized_packet)
 
 def send_packet(q4):
@@ -69,18 +70,48 @@ def send_packet(q4):
             serialized_packet = q4.get()
             # Send the serialized packet over RF
             try:
+                rf_serial.flush()
                 rf_serial.write(serialized_packet)  # Send bytes over the RF module
                 print(f'Packet sent: {serialized_packet.hex()}')  # Print as hex for readability
+                #
+                #
                 #FOR DEBUGGING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                #
+                #
+                print(f"DATA LENGTH: {len(serialized_packet)}")
                 payload = serialized_packet[:-4]  # setting to all but the sum . . . 
                 received_checksum = struct.unpack('<I', serialized_packet[-4:])[0] # and here we check that sum
                 computed_checksum = zlib.crc32(payload)
                 print(f'~~~~~~~~~~CHECK COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}"')
-                #FOR DEBUGGING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             except serial.SerialException as e:
                 print(f"Failed to send packet: {e}")
 
-        time.sleep(1) # FOR DEBUGGING PURPOSES, ONLY SEND PACKET ONCE EVERY SECOND
+        # Unpack the payload and checksum
+            if computed_checksum != received_checksum:
+                print(f"Checksum mismatch! Packet corrupted. \\\\ COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}")
+                continue
+
+            # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
+            pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', payload)
+
+            packet = Packet(
+                pac_id=pac_id,
+                gps_data=[lat, lon],
+                alt=alt,
+                high_temp=high_temp,
+                low_temp=low_temp
+            )
+
+            # Print the decoded packet
+            print(packet)
+
+        time.sleep(5)
+        
+        #
+        #
+        # FOR DEBUGGING PURPOSES, ONLY SEND PACKET ONCE EVERY SECOND
+        #
+        #
 
 
 if __name__ == '__main__':
