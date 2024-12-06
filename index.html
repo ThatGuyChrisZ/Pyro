@@ -118,8 +118,8 @@
                 </div>
             </li>
             <li class="menu-item"><a href="data.html">Data</a></li>
-            <li class="menu-item"><a href="#">About</a></li>
-            <li class="menu-item"><a href="#">Contact Us</a></li>
+            <li class="menu-item"><a href="about.html">About</a></li>
+            <li class="menu-item"><a href="contact.html">Contact Us</a></li>
         </ul>
     </div>
 
@@ -130,7 +130,7 @@
         <div class="search-bar">
             <input type="text" id="search-location" placeholder="Enter location (e.g., city or ZIP)">
             <span>or</span>
-            <select id="fire-name-select">
+            <select id="wildfire-select">
                 <option value="">Select Fire Name</option>
             </select>
             <button onclick="searchMap()">Search</button>
@@ -139,29 +139,18 @@
         <div id="map"></div>
     </div>
 
-    <script src="heatmap_overlay.js"></script>
+    <script src="map_script.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", () => {
+            console.log("Initializing map and loading wildfire options...");
             loadMap('active');
-            loadFireNames();
+            loadWildfireOptions();
         });
 
-        async function loadFireNames() {
-            const response = await fetch('/wildfire_markers?filter=active');
-            const fireData = await response.json();
-
-            const fireNameSelect = document.getElementById('fire-name-select');
-            fireData.forEach(fire => {
-                const option = document.createElement('option');
-                option.value = fire.name;
-                option.textContent = fire.name;
-                fireNameSelect.appendChild(option);
-            });
-        }
 
         async function searchMap() {
             const location = document.getElementById('search-location').value;
-            const fireName = document.getElementById('fire-name-select').value;
+            const fireName = document.getElementById('wildfire-select').value;
 
             if (location) {
                 const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`);
@@ -188,6 +177,5 @@
             }
         }
     </script>
-
 </body>
 </html>

@@ -57,6 +57,35 @@
             color: #ff9800;
         }
 
+        .dropdown {
+            display: none;
+            position: absolute;
+            top: 100%; 
+            left: 0;
+            background-color: #444;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 1001;
+        }
+
+        .dropdown a {
+            display: block;
+            padding: 10px 15px;
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+        }
+
+        .dropdown a:hover {
+            background-color: #555;
+            color: #ff9800;
+        }
+
+        .menu-item:hover .dropdown {
+            display: block;
+        }
+
         .content {
             padding: 20px;
             max-width: 1200px;
@@ -115,8 +144,8 @@
                 </div>
             </li>
             <li class="menu-item"><a href="data.html">Data</a></li>
-            <li class="menu-item"><a href="#">About</a></li>
-            <li class="menu-item"><a href="#">Contact Us</a></li>
+            <li class="menu-item"><a href="about.html">About</a></li>
+            <li class="menu-item"><a href="contact.html">Contact Us</a></li>
         </ul>
     </div>
 
@@ -144,9 +173,8 @@
                 const tableContainer = document.getElementById('table-container');
                 const fireFilter = document.getElementById('fire-filter');
 
-                // Populate fire filter dropdown
                 const fireNames = [...new Set(data.map(row => row.name))];
-                if (fireFilter.options.length === 1) { // Only populate once
+                if (fireFilter.options.length === 1) { 
                     fireNames.forEach(name => {
                         const option = document.createElement('option');
                         option.value = name;
@@ -155,7 +183,6 @@
                     });
                 }
 
-                // Filter data by fire name if provided
                 const filteredData = fireName ? data.filter(row => row.name === fireName) : data;
 
                 if (filteredData.length === 0) {
@@ -163,12 +190,10 @@
                     return;
                 }
 
-                // Create table
                 const table = document.createElement('table');
                 const thead = document.createElement('thead');
                 const tbody = document.createElement('tbody');
 
-                // Add header row
                 const headers = Object.keys(filteredData[0]);
                 const headerRow = document.createElement('tr');
                 headers.forEach(header => {
@@ -178,7 +203,6 @@
                 });
                 thead.appendChild(headerRow);
 
-                // Add data rows
                 filteredData.forEach(row => {
                     const tr = document.createElement('tr');
                     headers.forEach(header => {

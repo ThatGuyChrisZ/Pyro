@@ -58,6 +58,37 @@
             color: #ff9800;
         }
 
+        /* Dropdown styling */
+        .dropdown {
+            display: none;
+            position: absolute;
+            top: 100%; /* Position dropdown below the menu item */
+            left: 0;
+            background-color: #444;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 1001;
+        }
+
+        .dropdown a {
+            display: block;
+            padding: 10px 15px;
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+        }
+
+        .dropdown a:hover {
+            background-color: #555;
+            color: #ff9800;
+        }
+
+        /* Show dropdown on hover */
+        .menu-item:hover .dropdown {
+            display: block;
+        }
+
         .controls {
             display: flex;
             justify-content: center;
@@ -111,7 +142,7 @@
             box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
             font-size: 14px;
             line-height: 1.5;
-            z-index: 1001; /* Ensure legend is above map elements */
+            z-index: 1001;
         }
 
         .legend .color-bar {
@@ -131,14 +162,14 @@
                     <a href="past.html">Past Wildfires</a>
                 </div>
             </li>
-            <li class="menu-item"><a href="#">Data</a></li>
-            <li class="menu-item"><a href="#">About</a></li>
-            <li class="menu-item"><a href="#">Contact Us</a></li>
+            <li class="menu-item"><a href="data.html">Data</a></li>
+            <li class="menu-item"><a href="about.html">About</a></li>
+            <li class="menu-item"><a href="contact.html">Contact Us</a></li>
         </ul>
     </div>
 
     <div class="content">
-        <h1 id="fire-title"></h1>
+        <h1 id="fire-title">Fire Details</h1>
         <div class="controls">
             <label for="date-select">Date:</label>
             <input type="date" id="date-select">
@@ -147,8 +178,6 @@
         </div>
         <div class="gradient-options" id="color-key">
             <div class="gradient-option" style="background: linear-gradient(to right, blue, lime, yellow, orange, red);" data-gradient='{"0":"blue","0.2":"lime","0.5":"yellow","0.8":"orange","1":"red"}'></div>
-            <div class="gradient-option" style="background: linear-gradient(to right, purple, cyan, green, yellow);" data-gradient='{"0":"purple","0.33":"cyan","0.66":"green","1":"yellow"}'></div>
-            <div class="gradient-option" style="background: linear-gradient(to right, black, white);" data-gradient='{"0":"black","1":"white"}'></div>
         </div>
         <div class="map-container">
             <div id="map"></div>
@@ -163,93 +192,6 @@
         </div>
     </div>
 
-    <script>
-        const fireName = new URLSearchParams(window.location.search).get("name");
-        let currentGradient = {
-            0.6: "blue",
-            0.7: "lime",
-            0.8: "yellow",
-            0.9: "orange",
-            1: "red",
-        };
-
-        let map;
-        let heatLayer;
-
-        document.getElementById("fire-title").textContent = fireName || "Unknown Fire";
-
-        function setDefaultDateTime() {
-            const now = new Date();
-            document.getElementById("date-select").value = now.toISOString().split("T")[0];
-            document.getElementById("time-select").value = now.toTimeString().split(":").slice(0, 2).join(":");
-        }
-
-        async function loadFireHeatmap() {
-            try {
-                const date = document.getElementById("date-select").value;
-                const time = document.getElementById("time-select").value;
-
-                const queryParams = new URLSearchParams({ name: fireName });
-                if (date) queryParams.append("date", date);
-                if (time) queryParams.append("time", time);
-
-                const response = await fetch(`/heatmap_data?${queryParams.toString()}`);
-                if (!response.ok) throw new Error("Failed to fetch heatmap data");
-
-                const heatmapData = await response.json();
-                if (!heatmapData.length) {
-                    alert("No data available for the selected criteria.");
-                    return;
-                }
-
-                const temperatures = heatmapData.map(p => p.temperature);
-                const minTemp = Math.min(...temperatures);
-                const maxTemp = Math.max(...temperatures);
-
-                document.getElementById("low-temp").textContent = `${minTemp.toFixed(2)}°`;
-                document.getElementById("high-temp").textContent = `${maxTemp.toFixed(2)}°`;
-
-                const normalizedData = heatmapData.map(p => [
-                    p.latitude,
-                    p.longitude,
-                    (p.temperature - minTemp) / (maxTemp - minTemp),
-                ]);
-
-                if (heatLayer) map.removeLayer(heatLayer);
-
-                heatLayer = L.heatLayer(normalizedData, {
-                    radius: 50,
-                    blur: 35,
-                    gradient: currentGradient,
-                }).addTo(map);
-            } catch (error) {
-                console.error(error);
-                alert("An error occurred while loading the heatmap.");
-            }
-        }
-
-        function selectGradient(event) {
-            const selectedGradient = JSON.parse(event.target.getAttribute("data-gradient"));
-            currentGradient = selectedGradient;
-            document.querySelector(".color-bar").style.background = event.target.style.background;
-            loadFireHeatmap(); // Automatically reload the heatmap
-        }
-
-        document.addEventListener("DOMContentLoaded", () => {
-            setDefaultDateTime();
-
-            document.querySelectorAll(".gradient-option").forEach(option => {
-                option.addEventListener("click", selectGradient);
-            });
-
-            map = L.map("map").setView([39.3, -119.8], 8);
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                maxZoom: 18,
-                attribution: "© OpenStreetMap contributors",
-            }).addTo(map);
-
-            loadFireHeatmap();
-        });
-    </script>
+    <script src="fire_details_script.js"></script>
 </body>
 </html>
