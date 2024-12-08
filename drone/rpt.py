@@ -4,43 +4,39 @@
 
 import sys
 from radio.packet_class._v2.packet import Packet
-import struct
 import time
 import serial
+import struct
+import crcmod
 
-# Configuration
-DRONE_SERIAL_PORT = '/dev/ttyUSB0'
-BAUD_RATE = 9600
-SEND_INTERVAL = 2  # Send every 1 second
+# Initialize the serial port
+drone_serial = serial.Serial(port="/dev/ttyUSB0", baudrate=57600, timeout=1)
 
-# Initialize serial communication
-drone_serial = serial.Serial(port=DRONE_SERIAL_PORT, baudrate=BAUD_RATE, timeout=2)
+# CRC-8 checksum generator
+crc8 = crcmod.predefined.mkCrcFun('crc-8')
 
-def calculate_checksum(data: bytes) -> int:
-    """Calculate checksum by summing bytes and taking modulo 256."""
-    return sum(data) % 256
-
-def send_float(value: float):
-    """Serialize a float and send it with a checksum."""
-    # Serialize the float
-    serialized_data = struct.pack('<f', value)  # Little-endian float
-    checksum = calculate_checksum(serialized_data)
-    
-    # Append the checksum
-    packet = serialized_data + struct.pack('<B', checksum)
-    
-    # Send the packet
-    drone_serial.write(packet)
-    print(f"Sent: {packet.hex()} (float: {value})")
+def create_packet(data):
+    """Create a packet with serialized float and checksum."""
+    serialized_data = struct.pack('<f', data)  # Serialize the float (little-endian)
+    checksum = crc8(serialized_data)          # Generate checksum
+    packet = serialized_data + struct.pack('B', checksum)  # Append checksum
+    return packet
 
 if __name__ == "__main__":
-    print("Drone Test Script: Sending serialized float data...")
     try:
         while True:
-            test_value = 42.42  # Example float value
-            send_float(test_value)
-            time.sleep(SEND_INTERVAL)
+            test_value = 42.42  # Example float to send
+            packet = create_packet(test_value)
+            drone_serial.write(packet)
+            drone_serial.flush()  # Ensure all data is sent
+            print(f"Sent packet: {packet.hex()}")
+            time.sleep(1)  # Send every 1 second
     except KeyboardInterrupt:
-        print("Exiting.")
-    finally:
+        print("Exiting...")
         drone_serial.close()
+
+def alt_test():
+    while True:
+        drone_serial.write(b"Hello, GCS!\n")
+        print("Message sent.")
+        time.sleep(1)  # Send a message every second

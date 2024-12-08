@@ -20,7 +20,7 @@ pac_id_to_create = 1 # Global variable for creating the next packet id
 UNSIGNED_INT_MAX = 2147483647
 
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
-rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=9600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 
 # Take thermal data, add GPS + alt data
 def data_structure_builder(q1,q2):

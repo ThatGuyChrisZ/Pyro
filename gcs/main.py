@@ -8,7 +8,7 @@ PACKET_SIZE = 24 # ADJUST?
 def receive_and_decode_packets():
     # Open the serial port connected to the RF module
     try:
-        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=9600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
         print("Listening for packets on /dev/ttyUSB1...")
     except serial.SerialException as e:
         print(f"Error opening serial port: {e}")
