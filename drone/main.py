@@ -15,12 +15,27 @@ import struct
 import zlib
 from thermal_data import thermal_data
 from radio.packet_class._v2.packet import Packet
+gps_sim_file = open('sim_gps.txt', 'r')
+alt_sim_file = open('alt_gps.txt', 'r')
+
+# This will print every line one by one in the file
+for each in file:
+    print (each)
+
+
 
 pac_id_to_create = 1 # Global variable for creating the next packet id
 UNSIGNED_INT_MAX = 2147483647
 
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
 rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+
+def get_gps_sim(q5):
+    
+
+
+
+
 
 # Take thermal data, add GPS + alt data
 def data_structure_builder(q1,q2):
@@ -36,7 +51,7 @@ def data_processing(q2,q3):
             q3.put(q2.get())
 
 # Compartmentalize data in packet, serialize, and send
-def create_packet(q3, q4):
+def create_packet(q3, q4,q5):
     global pac_id_to_create
 
     while True:
@@ -133,18 +148,22 @@ if __name__ == '__main__':
     q1 = mp.Queue()
     q2 = mp.Queue()
     q3 = mp.Queue()
-    q4 = mp.Queue() # This is the queue for serialized packets that are ready for transmission
+    q4 = mp.Queue()
+    q5 = mp.Queue()  #simulation queue
+    
+    # This is the queue for serialized packets that are ready for transmission
 
     p1 = mp.Process(target=data_structure_builder, args=(q1,q2,))
     p2 = mp.Process(target=data_processing, args=(q2,q3,))
     p3 = mp.Process(target=create_packet, args=(q3, q4))
     p4 = mp.Process(target=send_packet, args=(q4,))
+    p5 = mp.Process(target=send_packet, args=(q5))
 
     p1.start()
     p2.start()
     p3.start()
     p4.start()
-
+    
     #print(q.get())
     #p.join()
     
