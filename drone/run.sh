@@ -1,1 +1,1 @@
-/home/pi/Desktop/pip/bin/python3 /home/pi/Desktop/pip/bin/Thermal/backup/Pyro/drone/main.py
+/home/pi/Desktop/pip/bin/python3 /home/pi/Desktop/pip/bin/Thermal/Pixhawk_Integration/Pyro/drone/main.py
