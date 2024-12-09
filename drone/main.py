@@ -30,28 +30,30 @@ rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtsct
 def gps_sim(q5):
     for pair in gps_sim_file:
         q5.put(pair)
-        time.sleep(0.2)
+        #time.sleep(0.2)
 
 # Take thermal data, add GPS + alt data
 def data_structure_builder(q1,q2,q5):
     thermal = ()
     output = (39.5389603,-119.811504)
     while True:
-        
+        if q5.empty() == False:
+            output = q5.get()
+            output = str(output).split(",")
             
         if q1.empty() == False:
-            
-            output = q5.get()
-            #print("Output")
-            #print(output)
-            output = str(output).split(",")
-        if q5.empty() == False:
-            #print("GO")
+            print("GO")
             thermal = thermal_data(q1.get())
             thermal.gps = (float(output[0]),float(output[1]))
             
             thermal.barometric = 400
             q2.put(thermal)
+            
+            #print("Output")
+            #print(output)
+            
+
+            
             
         
 
