@@ -31,7 +31,8 @@ UNSIGNED_INT_MAX = 2147483647
 rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 
 def get_gps_sim(q5):
-    
+    for pair in gps_sim_file:
+        q5.put(pair)
 
 
 
