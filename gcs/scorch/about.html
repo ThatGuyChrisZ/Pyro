@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Us</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .menu-bar {
+            background-color: #333;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            height: 60px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .menu-bar .logo {
+            height: 50px;
+            width: auto;
+            margin-right: 15px;
+        }
+
+        .menu-bar .menu {
+            display: flex;
+            align-items: center;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .menu-bar .menu-item {
+            margin: 0 15px;
+        }
+
+        .menu-bar .menu-item a {
+            text-decoration: none;
+            color: white;
+            font-size: 18px;
+        }
+
+        .menu-bar .menu-item a:hover {
+            color: #ff9800;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .content h1 {
+            margin-top: 20px;
+            color: #333;
+        }
+
+        .content p {
+            margin: 20px auto;
+            max-width: 800px;
+            font-size: 18px;
+            line-height: 1.6;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="menu-bar">
+        <img src="assets/team-logo.png" alt="Team Logo" class="logo">
+        <ul class="menu">
+            <li class="menu-item"><a href="index.html">Tracking</a></li>
+            <li class="menu-item"><a href="data.html">Data</a></li>
+            <li class="menu-item"><a href="about.html">About</a></li>
+            <li class="menu-item"><a href="contact.html">Contact Us</a></li>
+        </ul>
+    </div>
+
+    <div class="content">
+        <h1>About Us</h1>
+        <p>
+            Welcome to our wildfire tracking platform for our CS 425 project! Our goal is to provide real-time, accurate data on active wildfires in the Nevada community.
+        </p>
+        <p>
+            This project is run by Christopher Zinser, Robb Northrup, and Eric Westenburg. Follow along with our progress.
+        </p>
+    </div>
+</body>
+</html>

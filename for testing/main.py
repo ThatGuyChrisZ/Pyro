@@ -2,38 +2,14 @@ import struct
 import zlib
 import sys
 import serial
-import json
-import requests
 from packet_class._v2.packet import Packet
-
-PACKET_SIZE = 24  # ADJUST?
-
-# Possible function to forward packets to server alongside Robb's current implementation in receive_and_decode_packets
-def send_packet_to_server(packet):
-    """Sends the decoded packet to the server."""
-    server_url = "http://localhost:8000/add_packet"  # Current Server Location
-    try:
-        packet_data = {
-            "pac_id": packet.pac_id,
-            "gps_data": packet.gps_data,
-            "alt": packet.alt,
-            "high_temp": packet.high_temp,
-            "low_temp": packet.low_temp,
-        }
-
-        response = requests.post(server_url, json=packet_data)
-        if response.status_code == 200:
-            print("Packet successfully sent to server.")
-        else:
-            print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
-    except requests.RequestException as e:
-        print(f"Error connecting to the server: {e}")
+PACKET_SIZE = 24 # ADJUST?
 
 def receive_and_decode_packets():
     # Open the serial port connected to the RF module
     try:
-        rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-        print("Listening for packets on /dev/ttyUSB0...")
+        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+        print("Listening for packets on /dev/ttyUSB1...")
     except serial.SerialException as e:
         print(f"Error opening serial port: {e}")
         return
@@ -70,9 +46,8 @@ def receive_and_decode_packets():
                 low_temp=low_temp
             )
 
-            # Print the decoded packet and send to the server
+            # Print the decoded packet
             print(packet)
-            send_packet_to_server(packet)
 
         except struct.error as e:
             print(f"Error decoding packet: {e}")

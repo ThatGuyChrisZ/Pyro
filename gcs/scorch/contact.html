@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .menu-bar {
+            background-color: #333;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            height: 60px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .menu-bar .logo {
+            height: 50px;
+            width: auto;
+            margin-right: 15px;
+        }
+
+        .menu-bar .menu {
+            display: flex;
+            align-items: center;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .menu-bar .menu-item {
+            margin: 0 15px;
+        }
+
+        .menu-bar .menu-item a {
+            text-decoration: none;
+            color: white;
+            font-size: 18px;
+        }
+
+        .menu-bar .menu-item a:hover {
+            color: #ff9800;
+        }
+
+        .content {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .content h1 {
+            margin-top: 20px;
+            color: #333;
+        }
+
+        .content form {
+            margin: 20px auto;
+            max-width: 600px;
+        }
+
+        .content form input, .content form textarea, .content form button {
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        .content form button {
+            background-color: #333;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        .content form button:hover {
+            background-color: #ff9800;
+        }
+    </style>
+</head>
+<body>
+    <div class="menu-bar">
+        <img src="assets\team-logo.png" alt="Team Logo" class="logo">
+        <ul class="menu">
+            <li class="menu-item"><a href="index.html">Tracking</a></li>
+            <li class="menu-item"><a href="data.html">Data</a></li>
+            <li class="menu-item"><a href="about.html">About</a></li>
+            <li class="menu-item"><a href="contact.html">Contact Us</a></li>
+        </ul>
+    </div>
+
+    <div class="content">
+        <h1>Contact Us</h1>
+        <form>
+            <input type="text" name="name" placeholder="Your Name" required>
+            <input type="email" name="email" placeholder="Your Email" required>
+            <textarea name="message" placeholder="Your Message" rows="5" required></textarea>
+            <button type="submit">Send Message</button>
+        </form>
+    </div>
+</body>
+</html>
