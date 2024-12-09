@@ -84,7 +84,6 @@
             color: #ff9800;
         }
 
-        /* Show dropdown on hover */
         .menu-item:hover .dropdown {
             display: block;
         }
@@ -145,6 +144,14 @@
             z-index: 1001;
         }
 
+        .search-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
         .legend .color-bar {
             height: 10px;
             margin: 5px 0;
@@ -170,15 +177,24 @@
 
     <div class="content">
         <h1 id="fire-title">Fire Details</h1>
+    
+        <!-- Search Bar for Location -->
+        <div class="search-bar">
+            <input type="text" id="search-location" placeholder="Enter location (e.g., city or ZIP)">
+            <button onclick="searchMap()">Search</button>
+        </div>        
+    
         <div class="controls">
             <label for="date-select">Date:</label>
             <input type="date" id="date-select">
             <label for="time-select">Time:</label>
             <input type="time" id="time-select">
         </div>
+    
         <div class="gradient-options" id="color-key">
             <div class="gradient-option" style="background: linear-gradient(to right, blue, lime, yellow, orange, red);" data-gradient='{"0":"blue","0.2":"lime","0.5":"yellow","0.8":"orange","1":"red"}'></div>
         </div>
+    
         <div class="map-container">
             <div id="map"></div>
             <div class="legend">
@@ -191,7 +207,7 @@
             </div>
         </div>
     </div>
-
+    
     <script src="fire_details_script.js"></script>
 </body>
 </html>

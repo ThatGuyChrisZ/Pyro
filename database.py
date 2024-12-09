@@ -78,7 +78,7 @@ def fetch_wildfire_data(name: Optional[str] = None, date: Optional[str] = None, 
     conn.close()
     return results
 
-
+#for previous implementation when test data was from a CSV file
 def import_csv_to_db(csv_file_path: str, default_status: str = "active"):
     try:
         df = pd.read_csv(csv_file_path)

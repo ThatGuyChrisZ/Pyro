@@ -6,7 +6,6 @@ import pandas as pd
 from database import (
     init_db,
     process_packet,
-    fetch_wildfire_data,
     fetch_fire_list,
     fetch_heatmap_data,
     fetch_all_heatmap_data

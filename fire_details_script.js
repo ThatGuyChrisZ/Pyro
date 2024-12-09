@@ -34,7 +34,7 @@ async function fetchFireCenter() {
         }
     } catch (error) {
         console.error(error);
-        return { lat: 39.3, lon: -119.8 }; //Default coords
+        return { lat: 39.3, lon: -119.8 }; // Default coords
     }
 }
 
@@ -95,11 +95,34 @@ async function loadFireHeatmap() {
     }
 }
 
+async function searchMap() {
+    const location = document.getElementById("search-location").value;
+
+    if (location) {
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}`);
+            const locationData = await response.json();
+
+            if (locationData.length > 0) {
+                const { lat, lon } = locationData[0];
+                map.setView([lat, lon], 12);
+            } else {
+                alert("Location not found");
+            }
+        } catch (error) {
+            console.error("Search failed:", error);
+            alert("An error occurred while searching for the location.");
+        }
+    } else {
+        alert("Please enter a location to search");
+    }
+}
+
 function selectGradient(event) {
     const selectedGradient = JSON.parse(event.target.getAttribute("data-gradient"));
     currentGradient = selectedGradient;
     document.querySelector(".color-bar").style.background = event.target.style.background;
-    loadFireHeatmap(); 
+    loadFireHeatmap();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -107,6 +130,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.querySelectorAll(".gradient-option").forEach(option => {
         option.addEventListener("click", selectGradient);
+    });
+
+    document.getElementById("search-location").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") searchMap();
     });
 
     initializeMap();
