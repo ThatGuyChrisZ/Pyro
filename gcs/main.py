@@ -32,8 +32,8 @@ def send_packet_to_server(packet):
 def receive_and_decode_packets():
     # Open the serial port connected to the RF module
     try:
-        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-        print("Listening for packets on /dev/ttyUSB1...")
+        rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+        print("Listening for packets on /dev/ttyUSB0...")
     except serial.SerialException as e:
         print(f"Error opening serial port: {e}")
         return

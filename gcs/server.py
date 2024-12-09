@@ -95,7 +95,7 @@ class NavigationHandler(SimpleHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             try:
                 packet_data = json.loads(post_data)
-                name = "Davis Fire"
+                name = "New Data Fire"
                 pac_id = packet_data.get("pac_id")
                 gps_data = packet_data.get("gps_data", [0.0, 0.0])
                 alt = packet_data.get("alt", 0.0)
