@@ -34,17 +34,21 @@ def gps_sim(q5):
 
 # Take thermal data, add GPS + alt data
 def data_structure_builder(q1,q2,q5):
+    thermal = ()
+    output = (39.5389603,-119.811504)
     while True:
         
             
         if q1.empty() == False:
+            
+            output = q5.get()
+            #print("Output")
+            #print(output)
+            output = str(output).split(",")
+        if q5.empty() == False:
+            #print("GO")
             thermal = thermal_data(q1.get())
-            if q5.empty() == False:
-                output = q5.get()
-                print("Output")
-                print(output)
-                output = str(output).split(",")
-                thermal.gps = (float(output[0]),float(output[1]))
+            thermal.gps = (float(output[0]),float(output[1]))
             
             thermal.barometric = 400
             q2.put(thermal)
@@ -70,8 +74,8 @@ def create_packet(q3, q4):
 
             # Get data from the queue
             data = q3.get()
-            print("Data recieved at processing")
-            print(data.max_temp)
+            #print("Data recieved at processing")
+            #print(data.max_temp)
             # Create a Packet object
             packet = Packet(
                 pac_id=pac_id_to_create,       # Pulled from global variable
