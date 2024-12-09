@@ -5,9 +5,9 @@ print("test")
 
 import time
 import sys
-## import board
-## import busio
-## import adafruit_mlx90640
+import board
+import busio
+import adafruit_mlx90640
 import multiprocessing as mp
 # import ctypes
 import serial # for serial communication over usb
@@ -45,7 +45,8 @@ def create_packet(q3, q4):
 
             # Get data from the queue
             data = q3.get()
-
+            print("Data recieved at processing")
+            print(data.max_temp)
             # Create a Packet object
             packet = Packet(
                 pac_id=pac_id_to_create,       # Pulled from global variable
@@ -118,14 +119,14 @@ if __name__ == '__main__':
     PRINT_TEMPERATURES = True
     PRINT_ASCIIART = False
 
-    ## i2c = busio.I2C(board.SCL, board.SDA, frequency=800000)
+    i2c = busio.I2C(board.SCL, board.SDA, frequency=800000)
     # i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
 
-    ## mlx = adafruit_mlx90640.MLX90640(i2c)
+    mlx = adafruit_mlx90640.MLX90640(i2c)
     print("MLX addr detected on I2C")
-    ## print([hex(i) for i in mlx.serial_number])
+    print([hex(i) for i in mlx.serial_number])
 
-    ## mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
+    mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
     frame = [0] * 768
     mp.set_start_method('spawn')
 
@@ -150,7 +151,7 @@ if __name__ == '__main__':
     while True:
         #stamp = time.monotonic()
         try:			
-            ## mlx.getFrame(frame)
+            mlx.getFrame(frame)
             q1.put(frame)
         except ValueError:
             continue
