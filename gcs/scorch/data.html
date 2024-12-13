@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Database View</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <style>
         body, html {
             margin: 0;
@@ -60,7 +59,7 @@
         .dropdown {
             display: none;
             position: absolute;
-            top: 100%; 
+            top: 100%;
             left: 0;
             background-color: #444;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -154,84 +153,12 @@
         <p>Below is the current data stored in the database:</p>
         <div class="filter-container">
             <label for="fire-filter">Filter by Fire Name:</label>
-            <select id="fire-filter">
-                <option value="">All Fires</option>
-            </select>
+            <select id="fire-filter"></select>
         </div>
         <a href="/download_csv" class="download-btn">Download as CSV</a>
-        <div id="table-container">
-        </div>
+        <div id="table-container"></div>
     </div>
 
-    <script>
-        async function loadTableData(fireName = "") {
-            try {
-                const response = await fetch('/get_database');
-                if (!response.ok) throw new Error('Failed to fetch database data');
-
-                const data = await response.json();
-                const tableContainer = document.getElementById('table-container');
-                const fireFilter = document.getElementById('fire-filter');
-
-                const fireNames = [...new Set(data.map(row => row.name))];
-                if (fireFilter.options.length === 1) { 
-                    fireNames.forEach(name => {
-                        const option = document.createElement('option');
-                        option.value = name;
-                        option.textContent = name;
-                        fireFilter.appendChild(option);
-                    });
-                }
-
-                const filteredData = fireName ? data.filter(row => row.name === fireName) : data;
-
-                if (filteredData.length === 0) {
-                    tableContainer.innerHTML = '<p>No data available for the selected fire.</p>';
-                    return;
-                }
-
-                const table = document.createElement('table');
-                const thead = document.createElement('thead');
-                const tbody = document.createElement('tbody');
-
-                const headers = Object.keys(filteredData[0]);
-                const headerRow = document.createElement('tr');
-                headers.forEach(header => {
-                    const th = document.createElement('th');
-                    th.textContent = header;
-                    headerRow.appendChild(th);
-                });
-                thead.appendChild(headerRow);
-
-                filteredData.forEach(row => {
-                    const tr = document.createElement('tr');
-                    headers.forEach(header => {
-                        const td = document.createElement('td');
-                        td.textContent = row[header];
-                        tr.appendChild(td);
-                    });
-                    tbody.appendChild(tr);
-                });
-
-                table.appendChild(thead);
-                table.appendChild(tbody);
-                tableContainer.innerHTML = '';
-                tableContainer.appendChild(table);
-            } catch (error) {
-                console.error(error);
-                document.getElementById('table-container').innerHTML = '<p>Failed to load database data.</p>';
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            loadTableData();
-
-            const fireFilter = document.getElementById('fire-filter');
-            fireFilter.addEventListener('change', () => {
-                const selectedFire = fireFilter.value;
-                loadTableData(selectedFire);
-            });
-        });
-    </script>
+    <script src="javascript/data_script.js"></script>
 </body>
 </html>
