@@ -63,13 +63,24 @@ class NavigationHandler(SimpleHTTPRequestHandler):
 
         elif parsed_path.path == "/get_database":
             try:
+                fire_name = query_params.get("fire_name", [None])[0]
+
                 conn = sqlite3.connect("wildfire_data.db")
-                df = pd.read_sql_query("SELECT * FROM wildfires", conn)
+                if fire_name:
+                    # Fetch data from the 'wildfires' table for the selected fire
+                    query = "SELECT * FROM wildfires WHERE name = ?"
+                    df = pd.read_sql_query(query, conn, params=(fire_name,))
+                else:
+                    # Fetch data from the 'wildfire_status' table
+                    query = "SELECT * FROM wildfire_status"
+                    df = pd.read_sql_query(query, conn)
+
                 conn.close()
                 data = df.to_dict(orient="records")
                 self._send_json_response(data)
             except Exception as e:
                 self._send_error_response(str(e))
+
 
         elif parsed_path.path == "/download_csv":
             try:

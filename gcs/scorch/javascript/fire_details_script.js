@@ -29,7 +29,7 @@ async function fetchFireCenter() {
         const fire = wildfires.find(f => f.name === fireName);
 
         if (fire) {
-            return { lat: fire.latitude, lon: fire.longitude };
+            return { lat: fire.avg_latitude, lon: fire.avg_longitude };
         } else {
             console.warn("Fire not found in markers; defaulting map view.");
             return { lat: 39.3, lon: -119.8 };
