@@ -13,30 +13,46 @@ L.marker([wildfire.latitude, wildfire.longitude], { icon: wildfireIcon })
         window.location.href = `fire_details.html?name=${encodeURIComponent(wildfire.name)}`;
     });
 
-async function loadWildfireMarkers(filter = "active") {
-    try {
-        const response = await fetch(`/wildfire_markers?filter=${filter}`);
-        if (!response.ok) throw new Error("Failed to fetch wildfire markers");
-        const wildfireData = await response.json();
-
-        if (wildfireData.length === 0) {
-            console.warn("No wildfires found for filter:", filter);
-            return;
-        }
-
-        wildfireData.forEach((wildfire) => {
-            console.log("Adding marker for:", wildfire.name, wildfire.latitude, wildfire.longitude);
-            L.marker([wildfire.latitude, wildfire.longitude], { icon: wildfireIcon })
-                .addTo(window.map)
-                .bindTooltip(wildfire.name, { permanent: false, direction: "top" })
-                .on("click", () => {
-                    window.location.href = `fire_details.html?name=${encodeURIComponent(wildfire.name)}`;
+    async function loadWildfireMarkers(filter = "active") {
+        try {
+            const response = await fetch(`/wildfire_markers?filter=${filter}`);
+            if (!response.ok) throw new Error("Failed to fetch wildfire markers");
+            const wildfireData = await response.json();
+    
+            if (wildfireData.length === 0) {
+                console.warn("No wildfires found for filter:", filter);
+                return;
+            }
+    
+            wildfireData.forEach((wildfire) => {
+                console.log("Adding marker for:", wildfire.name, wildfire.latitude, wildfire.longitude);
+    
+                const marker = L.marker([wildfire.latitude, wildfire.longitude], { icon: wildfireIcon })
+                    .addTo(window.map)
+                    .bindTooltip(wildfire.name, { permanent: false, direction: "top" })
+                    .on("click", () => {
+                        window.location.href = `fire_details.html?name=${encodeURIComponent(wildfire.name)}`;
+                    });
+    
+                marker.on("mouseover", function () {
+                    marker.bindPopup(`
+                        <strong>${wildfire.name}</strong><br>
+                        ${wildfire.last_date_received && wildfire.last_time_received
+                            ? `<strong>Start Time:</strong> ${wildfire.last_date_received} ${wildfire.last_time_received}<br>` 
+                            : ""
+                        }
+                        <strong>Size:</strong> ${wildfire.size} km²
+                    `).openPopup();
                 });
-        });
-    } catch (error) {
-        console.error("Error loading wildfire markers:", error);
-    }
-}
+    
+                marker.on("mouseout", function () {
+                    marker.closePopup();
+                });
+            });
+        } catch (error) {
+            console.error("Error loading wildfire markers:", error);
+        }
+    }         
 
 async function loadMap(filter = "active") {
     window.map = L.map("map").setView([39.305278, -119.8325], 8);
