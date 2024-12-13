@@ -156,6 +156,46 @@
             height: 10px;
             margin: 5px 0;
         }
+
+        #weather-sidebar {
+            position: absolute;
+            right: 0;
+            top: 60px;
+            width: 300px;
+            background-color: #f9f9f9;
+            border-left: 1px solid #ccc;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            z-index: 1000;
+            font-family: Arial, sans-serif;
+        }
+
+        #weather-sidebar h2 {
+            font-size: 18px;
+            margin: 0 0 10px;
+        }
+
+        #weather-sidebar p {
+            margin: 5px 0;
+        }
+
+        .weather-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .weather-info {
+            flex: 1;
+            margin-right: 10px;
+        }
+
+        #weather-image {
+            max-width: 100px;
+            max-height: 100px;
+            border-radius: 8px;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -206,8 +246,23 @@
                 </div>
             </div>
         </div>
+
+        <div id="weather-sidebar">
+            <h2>Current Weather</h2>
+            <div class="weather-content">
+                <div class="weather-info">
+                    <p id="weather-description">Loading...</p>
+                    <p><strong>Temperature:</strong> <span id="weather-temperature">-</span>°C</p>
+                    <p><strong>Humidity:</strong> <span id="weather-humidity">-</span>%</p>
+                    <p><strong>Wind Speed:</strong> <span id="weather-wind">-</span> m/s</p>
+                </div>
+                <img id="weather-image" alt="Weather image" style="max-width: 100px; max-height: 100px; border-radius: 8px; display: none;">
+            </div>
+            <button id="refresh-weather">Refresh Weather</button>
+        </div>        
     </div>
     
-    <script src="javascript/fire_details_script.js"></script>
+    <script src="javascript/fire_details_script.js?v=1.0" type="module"></script>
+    <script src="javascript/weather_script.js?v=1.0" type="module"></script>    
 </body>
 </html>

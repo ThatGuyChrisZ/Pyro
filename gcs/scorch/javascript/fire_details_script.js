@@ -1,3 +1,5 @@
+import { displayWeather } from "./weather_script.js";
+
 const fireName = new URLSearchParams(window.location.search).get("name");
 let currentGradient = {
     0.6: "blue",
@@ -48,10 +50,18 @@ async function initializeMap() {
         attribution: "© OpenStreetMap contributors",
     }).addTo(map);
 
+    // Add a marker for the fire center
+    const marker = L.marker([center.lat, center.lon]).addTo(map);
+    marker.bindTooltip(fireName || "Unknown Fire").openTooltip();
+
+    displayWeather(center.lat, center.lon);
+
     loadFireHeatmap();
 }
 
 async function loadFireHeatmap() {
+
+    console.log("test");
     try {
         const date = document.getElementById("date-select").value;
         const time = document.getElementById("time-select").value;
@@ -128,6 +138,17 @@ function selectGradient(event) {
 document.addEventListener("DOMContentLoaded", () => {
     setDefaultDateTime();
 
+    document.getElementById("date-select").addEventListener("change", () => {
+        console.log("Date changed:", document.getElementById("date-select").value);
+        loadFireHeatmap();
+    });
+    
+    document.getElementById("time-select").addEventListener("change", () => {
+        console.log("Time changed:", document.getElementById("time-select").value);
+        loadFireHeatmap();
+    });
+    
+
     document.querySelectorAll(".gradient-option").forEach(option => {
         option.addEventListener("click", selectGradient);
     });
@@ -136,5 +157,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (event.key === "Enter") searchMap();
     });
 
-    initializeMap();
+    initializeMap().then(loadFireHeatmap);
+});
+
+document.getElementById("refresh-weather").addEventListener("click", async () => {
+    const center = map.getCenter();
+    console.log("Manually refreshing weather for:", center.lat, center.lng);
+    displayWeather(center.lat, center.lng);
 });

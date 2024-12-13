@@ -46,10 +46,14 @@ class NavigationHandler(SimpleHTTPRequestHandler):
 
         elif parsed_path.path == "/heatmap_data":
             name = query_params.get("name", [None])[0]
+            date = query_params.get("date", [None])[0]
+            time = query_params.get("time", [None])[0]
+
             if name:
-                heatmap_data = fetch_heatmap_data(name)
+                heatmap_data = fetch_heatmap_data(name, date, time)
             else:
                 heatmap_data = fetch_all_heatmap_data()
+
             self._send_json_response(heatmap_data)
 
         elif parsed_path.path == "/wildfire_markers":
