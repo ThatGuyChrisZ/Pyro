@@ -40,6 +40,7 @@ rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtsct
 #   Return: None                                                       #
 ########################################################################
 def gps_sim(q5):
+    #Pulls simulated gps data from sim file
     for pair in gps_sim_file:
         q5.put(pair)
         #time.sleep(0.2)
@@ -57,15 +58,22 @@ def gps_sim(q5):
 #   Return: None                                                       #
 ########################################################################
 def data_structure_builder(q1,q2,q5):
+    #Initialize variables and set to resting values
     thermal = ()
     output = (39.5389603,-119.811504)
+    #loop check for if a frame is available to process
     while True:
         if q5.empty() == False:
+            #retrieve gps data
             output = q5.get()
             output = str(output).split(",")
             
         if q1.empty() == False:
+            #process frame
+            
             #print("GO")
+            
+            #Set data structures gps and barometric values
             thermal = thermal_data(q1.get())
             thermal.gps = (float(output[0]),float(output[1]))
             
@@ -90,8 +98,10 @@ def data_structure_builder(q1,q2,q5):
 #   Return: None                                                       #
 ########################################################################
 def data_processing(q2,q3):
+    # pulls thermal data as available by queue
     while True:
         if q2.empty() == False:
+            #pushes data to packet creation
             q3.put(q2.get())
 
 # Compartmentalize data in packet, serialize, and send
