@@ -40,6 +40,7 @@ rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtsct
 #   Return: None                                                       #
 ########################################################################
 def gps_sim(q5):
+    #Pulls simulated gps data from sim file
     for pair in gps_sim_file:
         q5.put(pair)
         #time.sleep(0.2)
@@ -57,15 +58,22 @@ def gps_sim(q5):
 #   Return: None                                                       #
 ########################################################################
 def data_structure_builder(q1,q2,q5):
+    #Initialize variables and set to resting values
     thermal = ()
     output = (39.5389603,-119.811504)
+    #loop check for if a frame is available to process
     while True:
         if q5.empty() == False:
+            #retrieve gps data
             output = q5.get()
             output = str(output).split(",")
             
         if q1.empty() == False:
+            #process frame
+            
             #print("GO")
+            
+            #Set data structures gps and barometric values
             thermal = thermal_data(q1.get())
             thermal.gps = (float(output[0]),float(output[1]))
             
@@ -90,8 +98,10 @@ def data_structure_builder(q1,q2,q5):
 #   Return: None                                                       #
 ########################################################################
 def data_processing(q2,q3):
+    # pulls thermal data as available by queue
     while True:
         if q2.empty() == False:
+            #pushes data to packet creation
             q3.put(q2.get())
 
 # Compartmentalize data in packet, serialize, and send
@@ -189,20 +199,26 @@ def send_packet(q4):
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
+    
+    #Thermal Camera Settings
     PRINT_TEMPERATURES = True
     PRINT_ASCIIART = False
-
+    
+    #Set parameters to communicate with thermal camera
     i2c = busio.I2C(board.SCL, board.SDA, frequency=800000)
     # i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
-
+    
+    #Initialize thermal camera
     mlx = adafruit_mlx90640.MLX90640(i2c)
     print("MLX addr detected on I2C")
     print([hex(i) for i in mlx.serial_number])
 
+    #Adjust thermal cameras refresh rate
     mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
     frame = [0] * 768
     mp.set_start_method('spawn')
 
+    #Initialize shared memory between queues
     q1 = mp.Queue()
     q2 = mp.Queue()
     q3 = mp.Queue()
@@ -211,12 +227,14 @@ if __name__ == '__main__':
     
     # This is the queue for serialized packets that are ready for transmission
 
+    #Initialize threads for processing and transmitting radio data
     p1 = mp.Process(target=data_structure_builder, args=(q1,q2, q5))
     p2 = mp.Process(target=data_processing, args=(q2,q3,))
     p3 = mp.Process(target=create_packet, args=(q3, q4,))
     p4 = mp.Process(target=send_packet, args=(q4,))
     p5 = mp.Process(target=gps_sim, args=(q5,))
 
+    #Start threads
     p1.start()
     p2.start()
     p3.start()
@@ -227,6 +245,7 @@ if __name__ == '__main__':
     #print(q.get())
     #p.join()
     
+    #Frame retrieval from mlx 90640
     while True:
         #stamp = time.monotonic()
         try:			
