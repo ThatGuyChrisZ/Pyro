@@ -27,12 +27,35 @@ UNSIGNED_INT_MAX = 2147483647
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
 rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 
+
+
+########################################################################
+#   Function Name: gps_sim                                             #
+#   Author: Chris Zinser                                               #
+#   Paramters: queue                                                   #
+#   Description: This function reads data out of the gps sim file      #
+#                and places it into a queue for the                    #
+#                 data_structure_builder process. This allows us to    # 
+#                  test the gps system without a physical flight.      #
+#   Return: None                                                       #
+########################################################################
 def gps_sim(q5):
     for pair in gps_sim_file:
         q5.put(pair)
         #time.sleep(0.2)
 
 # Take thermal data, add GPS + alt data
+
+########################################################################
+#   Function Name: data_structure_builder                              #
+#   Author: Chris Zinser                                               #
+#   Parameters: queue <int> , queue <thermal_data>                     #
+#               ,queue <(float,float)>                                 #
+#   Description: This function recieves frames from the main thread    #
+#                via a shared queue and place the frame in a           #
+#                data structure along with gps and altitude data       #       
+#   Return: None                                                       #
+########################################################################
 def data_structure_builder(q1,q2,q5):
     thermal = ()
     output = (39.5389603,-119.811504)
@@ -42,7 +65,7 @@ def data_structure_builder(q1,q2,q5):
             output = str(output).split(",")
             
         if q1.empty() == False:
-            print("GO")
+            #print("GO")
             thermal = thermal_data(q1.get())
             thermal.gps = (float(output[0]),float(output[1]))
             
@@ -57,7 +80,15 @@ def data_structure_builder(q1,q2,q5):
             
         
 
-# Find min + max of frames
+########################################################################
+#   Function Name: data_processing                                     #
+#   Author: Chris Zinser                                               #
+#   Parameters: queue <thermal_data> , queue <thermal_data>            #                               
+#   Description: This function recieves frames from the                #
+#                data_structure_builder process and applies            #
+#                modification as needed                                #                            
+#   Return: None                                                       #
+########################################################################
 def data_processing(q2,q3):
     while True:
         if q2.empty() == False:
@@ -146,6 +177,17 @@ def send_packet(q4):
         #
 
 
+########################################################################
+#   Function Name: main                                                #
+#   Author: Chris Zinser                                               #
+#   Parameters:  none                                                  #                               
+#   Description: This is the main thread for the program. This thread  #
+#                takes in frames from the thermal camera and places the#
+#                frames in a queue for further processing. All         #
+#                processes are also created from this thread as well   #
+#                as device setup for periphials                        #                            
+#   Return: None                                                       #
+########################################################################
 if __name__ == '__main__':
     PRINT_TEMPERATURES = True
     PRINT_ASCIIART = False
