@@ -1,3 +1,8 @@
+# ///////////////////////////////////////////////////
+# contributed by Robb Northrup
+# ///////////////////////////////////////////////////
+
+
 import struct # For serialization of the data
 import zlib # checksum/error detection
 
