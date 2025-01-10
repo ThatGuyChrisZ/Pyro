@@ -13,6 +13,7 @@ import multiprocessing as mp
 import serial # for serial communication over usb
 import struct
 import zlib
+import os
 from thermal_data import thermal_data
 from radio.packet_class._v2.packet import Packet
 gps_sim_file = open('sim_gps.txt', 'r')
@@ -43,7 +44,7 @@ def gps_sim(q5):
     #Pulls simulated gps data from sim file
     for pair in gps_sim_file:
         q5.put(pair)
-        #time.sleep(0.2)
+        time.sleep(0.2)
 
 # Take thermal data, add GPS + alt data
 
@@ -62,7 +63,10 @@ def data_structure_builder(q1,q2,q5):
     thermal = ()
     output = (39.5389603,-119.811504)
     #loop check for if a frame is available to process
+    pid = os.getpid()
+    os.sched_setaffinity(pid, {1})
     while True:
+        #print("Data Structure Builder running on core:",os.sched_getaffinity(pid)  )
         if q5.empty() == False:
             #retrieve gps data
             output = q5.get()
@@ -98,9 +102,12 @@ def data_structure_builder(q1,q2,q5):
 #   Return: None                                                       #
 ########################################################################
 def data_processing(q2,q3):
+    pid = os.getpid()
+    os.sched_setaffinity(pid, {2})
     # pulls thermal data as available by queue
     while True:
         if q2.empty() == False:
+            #print("Data processing running on core:",os.sched_getaffinity(pid)  )
             #pushes data to packet creation
             q3.put(q2.get())
 
@@ -108,11 +115,14 @@ def data_processing(q2,q3):
 def create_packet(q3, q4):
     global pac_id_to_create
     newest = 0
+    pid = os.getpid()
+    os.sched_setaffinity(pid, {3})
     while True:
         
 
         
         if not q3.empty():
+            #print("Packet Creation running on core:",os.sched_getaffinity(pid)  )
             # print("Data on thread 3")
 
             # Get data from the queue
@@ -138,30 +148,33 @@ def create_packet(q3, q4):
             q4.put(serialized_packet)
 
 def send_packet(q4):
+    pid = os.getpid()
+    os.sched_setaffinity(pid, {3})
     while True:
         if not q4.empty():
+            #print("Send Packet running on core:",os.sched_getaffinity(pid)  )
             serialized_packet = q4.get()
             # Send the serialized packet over RF
             try:
                 rf_serial.flush()
                 rf_serial.write(serialized_packet)  # Send bytes over the RF module
-                print(f'Packet sent: {serialized_packet.hex()}')  # Print as hex for readability
+                #print(f'Packet sent: {serialized_packet.hex()}')  # Print as hex for readability
                 #
                 #
                 #FOR DEBUGGING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 #
                 #
-                print(f"DATA LENGTH: {len(serialized_packet)}")
+                #print(f"DATA LENGTH: {len(serialized_packet)}")
                 payload = serialized_packet[:-4]  # setting to all but the sum . . . 
                 received_checksum = struct.unpack('<I', serialized_packet[-4:])[0] # and here we check that sum
                 computed_checksum = zlib.crc32(payload)
-                print(f'~~~~~~~~~~CHECK COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}"')
+                #print(f'~~~~~~~~~~CHECK COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}"')
             except serial.SerialException as e:
                 print(f"Failed to send packet: {e}")
 
         # Unpack the payload and checksum
             if computed_checksum != received_checksum:
-                print(f"Checksum mismatch! Packet corrupted. \\\\ COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}")
+                #print(f"Checksum mismatch! Packet corrupted. \\\\ COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}")
                 continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
@@ -178,7 +191,7 @@ def send_packet(q4):
             # Print the decoded packet
             print(packet)
 
-        time.sleep(5)
+        #time.sleep(5)
         
         #
         #
@@ -199,6 +212,8 @@ def send_packet(q4):
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
+    pid = os.getpid()
+    os.sched_setaffinity(pid, {0})
     
     #Thermal Camera Settings
     PRINT_TEMPERATURES = True
@@ -251,5 +266,6 @@ if __name__ == '__main__':
         try:			
             mlx.getFrame(frame)
             q1.put(frame)
+            #print("Main Thread running on core:",os.sched_getaffinity(pid)  )
         except ValueError:
             continue
