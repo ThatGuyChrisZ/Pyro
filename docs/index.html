@@ -111,6 +111,12 @@
         <h1>Pyro Fire Tracking</h1>
         <p>Autonomous Wildfire-Monitoring/Mapping Quadcopter</p>
         <p>CS 426 Senior Project in Computer Science, Spring 2025, at UNR, CSE Department</p>
+
+        <h2>Project Description</h2>
+        <p>The goal of our project is to produce a cost-effective, autonomous drone system capable of generating highly accurate, real-time 2D heat maps of active wildfires. Our approach centers around two main elements: a ground control system and a semi-autonomous drone. The drone is responsible for data collection using a variety of sensors: a thermal camera, GPS, dual-redundant IMU, and an altimeter. It is custom-designed and 3D-printed using a carbon nylon frame with an emphasis on maintaining a light weight alongside the necessary power management dependencies. On board the drone is a variety of system hardware components including a Pixhawk flight controller, an electronic speed controller, and a ride-along Raspberry Pi board that is utilized along with a telemetry radio to communicate with the ground control station. 
+            The ground control system is responsible for both flight control and data analysis. Radio communication will be utilized to both communicate flight commands and transmit collected data from the ride-along board. The Ardupilot program on the ground control computer communicates with the on board flight controller to maintain the proper flight path and ensure motors, propellers, and the speed controller are functioning as intended. Data collected by the drone will be serialized and delivered as packets to the ground control computer. Once received, data packets are decoded and permanently stored in an SQLite database. The database is then visualized as a heat map overlay using the Javascript Leaflet library and OpenStreetMap. 
+            The primary intended users for this project are emergency management and fire departments. Our aim is to improve upon their current wildfire tracking solutions, like satellite imaging, by producing high-resolution wildfire heatmaps in real time. Users could also include residents who seek accurate, timely data in these emergency situations. With emergency management technology, dependability is essential. We will seek to maintain reliability through accurate data collection, data transmission checks and post-processing correction. Making certain that only reliable data is used for analysis and visualization will also ensure that safety and security are achieved. 
+            </p>
     </div>
 </body>
 </html>
