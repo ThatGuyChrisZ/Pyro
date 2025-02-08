@@ -2,11 +2,16 @@ import struct
 import zlib
 import sys
 import serial
+import socket # For UDP socket transmission in MODE 2
 import json
 import requests
 from packet_class._v2.packet import Packet
 
 PACKET_SIZE = 24  # ADJUST?
+ACK_PACKET_SIZE = (3 + 8) # String (of three letters) + integer size
+UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
+
+prog_mode = 2 # Change this to run in a different mode
 
 # Possible function to forward packets to server alongside Robb's current implementation in receive_and_decode_packets
 def send_packet_to_server(packet):
@@ -29,19 +34,40 @@ def send_packet_to_server(packet):
     except requests.RequestException as e:
         print(f"Error connecting to the server: {e}")
 
+
+
+########################################################################
+#   Function Name: receive_and_decode_packets()                        #
+#   Author: Robb Northrup                                              #
+#   Parameters: N/A                                                    #                               
+#   Description: Take packets off of the bus, deserialize,             #      
+#                and send the packets to send_packet_to_server()       #                                                              #
+#   Return: None                                                       #
+########################################################################
 def receive_and_decode_packets():
-    # Open the serial port connected to the RF module
-    try:
-        rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-        print("Listening for packets on /dev/ttyUSB0...")
-    except serial.SerialException as e:
-        print(f"Error opening serial port: {e}")
-        return
+    if prog_mode == 2:
+        # UDP socket debug mode (local)
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DRGRAM)
+        udp_socket.bind(("127.0.0.1", UDP_PORT))
+        print(f"Listening for packets on UDP Port {UDP_PORT}...")
+    else: # Mode 0|1: Read from RF serial
+        # Open the serial port connected to the RF module
+        try:
+            rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+            print("Listening for packets on /dev/ttyUSB0...")
+        except serial.SerialException as e:
+            print(f"Error opening serial port: {e}")
+            return
 
     while True:
         try:
-            # Read the serialized data from the RF module
-            data = rf_serial.read(PACKET_SIZE)
+            # Receive the data off the bus
+            if prog_mode == 2:
+                data, addr = udp_socket.recvfrom(PACKET_SIZE)
+                print(f"Received packet from {addr}")
+            else:
+                # Read the serialized data from the RF module
+                data = rf_serial.read(PACKET_SIZE)
 
             print(f"\nPACKET LENGTH: {len(data)}")
             print(f'PACKET RECIEVED: {data.hex()}')  # Print as hex for readability
@@ -69,6 +95,12 @@ def receive_and_decode_packets():
                 high_temp=high_temp,
                 low_temp=low_temp
             )
+
+            # Handshake Method
+            ACK = struct.pack('<sI', \
+                "ACK", \
+                packet.pac_id)
+            rf_serial.write(ACK)
 
             # Print the decoded packet and send to the server
             print(packet)

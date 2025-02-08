@@ -1,37 +1,44 @@
-# ///////////////////////////////////////////////////
-# contributed by Robb Northrup
-# ///////////////////////////////////////////////////
-
-
-print("test")
+###########################################################################
+#                                                                         #
+#              Contributed by Chris Zinser, Robb Northrup                 #
+#                                                                         #
+###########################################################################
 
 # SPDX-FileCopyrightText: 2021 ladyada for Adafruit Industries
 # SPDX-License-Identifier: MIT
 
+prog_mode # 0: normal runtime
+          # 1: debug mode
+          # 2: debug on current system
+          #      1.) Intended to have this run on a developer system, on the ride-along board
+          #      2.) Data intended to be sent over RF is sent through interprocess communication
+          #          means for debugging purposes
+
 import time
 import sys
+import argparse
 import board
 import busio
 import adafruit_mlx90640
 import multiprocessing as mp
-# import ctypes
 import serial # for serial communication over usb
+import socket # for debug mode, sending data over a UDP socket meant to emulate RF transmission
 import struct
 import zlib
 import os
 from thermal_data import thermal_data
-from radio.packet_class._v2.packet import Packet
-gps_sim_file = open('sim_gps.txt', 'r')
-#alt_sim_file = open('alt_gps.txt', 'r')
+from radio.packet_class._v3.packet import Packet
+from radio.packet_class._v3.packet_info import Packet_Info
 
-
-
-
-pac_id_to_create = 1 # Global variable for creating the next packet id
+pac_id_to_create = 1 # Global variable for creating the next packet id (don't kill me)
 UNSIGNED_INT_MAX = 2147483647
 
+rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+ACK_PACKET_SIZE = (3 + 8) # String (of three letters) + integer size
+GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
+gps_sim_file = open('sim_gps.txt', 'r')
+# alt_sim_file = open('alt_gps.txt', 'r')
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
-rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 
 
 
@@ -51,7 +58,7 @@ def gps_sim(q5):
         q5.put(pair)
         time.sleep(0.2)
 
-# Take thermal data, add GPS + alt data
+
 
 ########################################################################
 #   Function Name: data_structure_builder                              #
@@ -90,10 +97,7 @@ def data_structure_builder(q1,q2,q5):
             q2.put(thermal)
             
             #print("Output")
-            #print(output)
-            
-
-            
+            #print(output)         
             
         
 
@@ -116,24 +120,27 @@ def data_processing(q2,q3):
             #pushes data to packet creation
             q3.put(q2.get())
 
-# Compartmentalize data in packet, serialize, and send
+
+
+########################################################################
+#   Function Name: create_packet                                       #
+#   Author: Robb Northrup                                              #
+#   Parameters: queue <thermal_data> (from data_processing()),         #
+#               queue <thermal_data> (to send_packet())                #                               
+#   Description: Compartmentalize data in packet, serialize,           #
+#                and then send the packet                              #                            
+#   Return: None                                                       #
+########################################################################
 def create_packet(q3, q4):
     global pac_id_to_create
     newest = 0
     pid = os.getpid()
     os.sched_setaffinity(pid, {3})
-    while True:
-        
-
-        
+    while True: 
         if not q3.empty():
-            #print("Packet Creation running on core:",os.sched_getaffinity(pid)  )
-            # print("Data on thread 3")
-
             # Get data from the queue
             data = q3.get()
-            #print("Data recieved at processing")
-            #print(data.max_temp)
+
             # Create a Packet object
             packet = Packet(
                 pac_id=pac_id_to_create,       # Pulled from global variable
@@ -143,66 +150,94 @@ def create_packet(q3, q4):
                 low_temp=data.min_temp         # Min temperature
             )
 
+            # Serialize the Packet
+            serialized_packet = packet.serialize()
+            queued_packet_info = Packet_Info(serialized_packet, packet.pac_id)
+            q4.put(queued_packet_info)
+
             if pac_id_to_create == UNSIGNED_INT_MAX:
                 pac_id_to_create = 1
             else:
                 pac_id_to_create += 1
 
-            # Serialize the Packet
-            serialized_packet = packet.serialize()
-            q4.put(serialized_packet)
 
+
+########################################################################
+#   Function Name: send_packet                                         #
+#   Author: Robb Northrup                                              #
+#   Parameters: queue <thermal_data> (from create_packet())            #                               
+#   Description: Send serialized packets over RF to the GCS            #                            
+#   Return: None                                                       #
+########################################################################
 def send_packet(q4):
     pid = os.getpid()
     os.sched_setaffinity(pid, {3})
+
+    # Create a UDP socket for debug mode
+    udp_socket = None
+    if prog_mode == 2:
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+
     while True:
-        if not q4.empty():
-            #print("Send Packet running on core:",os.sched_getaffinity(pid)  )
-            serialized_packet = q4.get()
+        # Normal Operation, send packets . . . 
+        if not q4.empty() and q_unack_pac_info.empty():
+            ser_pac_to_send_info = q4.get()
+            ser_pac_to_send = ser_pac_to_send_info.serialized_packet
+
             # Send the serialized packet over RF
             try:
-                rf_serial.flush()
-                rf_serial.write(serialized_packet)  # Send bytes over the RF module
-                #print(f'Packet sent: {serialized_packet.hex()}')  # Print as hex for readability
-                #
-                #
-                #FOR DEBUGGING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                #
-                #
-                #print(f"DATA LENGTH: {len(serialized_packet)}")
-                payload = serialized_packet[:-4]  # setting to all but the sum . . . 
-                received_checksum = struct.unpack('<I', serialized_packet[-4:])[0] # and here we check that sum
-                computed_checksum = zlib.crc32(payload)
-                #print(f'~~~~~~~~~~CHECK COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}"')
+                # Send Packet
+                if prog_mode != 2: # Mode 0|1: Normal transmission over RF
+                    rf_serial.flush()
+                    rf_serial.write(ser_pac_to_send)  # Send bytes over the RF module
+                else:  # Debug mode, send over UDP
+                    udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
+
+                ser_pac_to_send_info.set_timestamp(time.clock_gettime_ns())
+                if prog_mode != 0:
+                    print(f"{ser_pac_to_send_info.pac_id} SENT AT {ser_pac_to_send_info.get_timestamp()}")
+
+                q_unack_pac_info.put(ser_pac_to_send_info)
+
+                # Extract payload
+                payload = ser_pac_to_send[:-4]  # All bytes except checksum
+
+                # Handshake Method
+                REQ = struct.pack('<sI', b"REQ", ser_pac_to_send_info.pac_id)
+                if prog_mode != 2:
+                    rf_serial.write(REQ)
+                else:
+                    udp_socket.sendto(REQ, GCS_ADDRESS)
+
             except serial.SerialException as e:
-                print(f"Failed to send packet: {e}")
+                if prog_mode != 0:
+                    print(f"Failed to send packet: {e}")
 
-        # Unpack the payload and checksum
-            if computed_checksum != received_checksum:
-                #print(f"Checksum mismatch! Packet corrupted. \\\\ COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}")
-                continue
+            # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET FOR TROUBLESHOOTING
+            if prog_mode != 0:
+                pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', payload)
 
-            # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
-            pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', payload)
+                packet = Packet(
+                    pac_id=pac_id,
+                    gps_data=[lat, lon],
+                    alt=alt,
+                    high_temp=high_temp,
+                    low_temp=low_temp
+                )
 
-            packet = Packet(
-                pac_id=pac_id,
-                gps_data=[lat, lon],
-                alt=alt,
-                high_temp=high_temp,
-                low_temp=low_temp
-            )
+                # Print the decoded packet
+                print(packet)
 
-            # Print the decoded packet
-            print(packet)
+        # If waiting on ACKs from packets . . .
+        elif not q_unack_pac_info.empty():
+            pass
 
-        #time.sleep(5)
-        
-        #
-        #
-        # FOR DEBUGGING PURPOSES, ONLY SEND PACKET ONCE EVERY SECOND
-        #
-        #
+        # Review incoming ACKs for all packets and pop off the queue . . .
+        inc_ack_pac = rf_serial.read(ACK_PACKET_SIZE)
+
+        time.sleep(5)
+
 
 
 ########################################################################
@@ -217,50 +252,59 @@ def send_packet(q4):
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
+    global prog_mode
+    parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
+    parser.add_argument("--mode", type=int, help="MODES: 0-Basic | 1-Debug | 2-Local Sys Debug")
+    args = parser.parse_args()
+    if args.mode is not None:  # Avoid overwriting if mode isn't provided
+        prog_mode = args.mode
+
     pid = os.getpid()
     os.sched_setaffinity(pid, {0})
     
-    #Thermal Camera Settings
+    # Thermal Camera Settings
     PRINT_TEMPERATURES = True
     PRINT_ASCIIART = False
     
-    #Set parameters to communicate with thermal camera
-    i2c = busio.I2C(board.SCL, board.SDA, frequency=800000)
+    # Set parameters to communicate with thermal camera
+    if prog_mode != 2:
+        i2c = busio.I2C(board.SCL, board.SDA, frequency=800000)
     # i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
     
-    #Initialize thermal camera
-    mlx = adafruit_mlx90640.MLX90640(i2c)
-    print("MLX addr detected on I2C")
-    print([hex(i) for i in mlx.serial_number])
+    # Initialize thermal camera
+    if prog_mode != 2:
+        mlx = adafruit_mlx90640.MLX90640(i2c)
+        if prog_mode == 1:
+            print("MLX addr detected on I2C")
+            print([hex(i) for i in mlx.serial_number])
 
-    #Adjust thermal cameras refresh rate
-    mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
+    # Adjust thermal cameras refresh rate
+    if prog_mode != 2:
+        mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
     frame = [0] * 768
     mp.set_start_method('spawn')
 
-    #Initialize shared memory between queues
+    # Initialize shared memory between queues
     q1 = mp.Queue()
     q2 = mp.Queue()
     q3 = mp.Queue()
     q4 = mp.Queue()
     q5 = mp.Queue()  #simulation queue
-    
-    # This is the queue for serialized packets that are ready for transmission
+    q_unack_pac_info = mp.Queue() # queue for holding un-ACKed packets
 
-    #Initialize threads for processing and transmitting radio data
+    # Initialize threads for processing and transmitting radio data
     p1 = mp.Process(target=data_structure_builder, args=(q1,q2, q5))
     p2 = mp.Process(target=data_processing, args=(q2,q3,))
     p3 = mp.Process(target=create_packet, args=(q3, q4,))
     p4 = mp.Process(target=send_packet, args=(q4,))
     p5 = mp.Process(target=gps_sim, args=(q5,))
 
-    #Start threads
+    # Start threads
     p1.start()
     p2.start()
     p3.start()
     p4.start()
     p5.start()
-    
     
     #print(q.get())
     #p.join()
@@ -268,8 +312,9 @@ if __name__ == '__main__':
     #Frame retrieval from mlx 90640
     while True:
         #stamp = time.monotonic()
-        try:			
-            mlx.getFrame(frame)
+        try:
+            if prog_mode != 2:			
+                mlx.getFrame(frame)
             q1.put(frame)
             #print("Main Thread running on core:",os.sched_getaffinity(pid)  )
         except ValueError:
