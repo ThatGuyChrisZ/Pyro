@@ -34,8 +34,6 @@ def send_packet_to_server(packet):
     except requests.RequestException as e:
         print(f"Error connecting to the server: {e}")
 
-
-
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #
 #   Author: Robb Northrup                                              #
@@ -47,8 +45,8 @@ def send_packet_to_server(packet):
 def receive_and_decode_packets():
     if prog_mode == 2:
         # UDP socket debug mode (local)
-        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DRGRAM)
-        udp_socket.bind(("127.0.0.1", UDP_PORT))
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp_socket.bind(("0.0.0.0", UDP_PORT))
         print(f"Listening for packets on UDP Port {UDP_PORT}...")
     else: # Mode 0|1: Read from RF serial
         # Open the serial port connected to the RF module
@@ -70,7 +68,7 @@ def receive_and_decode_packets():
                 data = rf_serial.read(PACKET_SIZE)
 
             print(f"\nPACKET LENGTH: {len(data)}")
-            print(f'PACKET RECIEVED: {data.hex()}')  # Print as hex for readability
+            print(f'PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
             if len(data) < PACKET_SIZE:
                 print("Incomplete packet received, skipping...")
                 continue
@@ -82,7 +80,7 @@ def receive_and_decode_packets():
             computed_checksum = zlib.crc32(payload)
 
             if computed_checksum != received_checksum:
-                print(f"Checksum mismatch! Packet corrupted. \\\\ COMPUTED:{computed_checksum}, RECIEVED: {received_checksum}")
+                print(f"Checksum mismatch! Packet corrupted. \\ COMPUTED:{computed_checksum}, RECEIVED: {received_checksum}")
                 continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
@@ -97,10 +95,12 @@ def receive_and_decode_packets():
             )
 
             # Handshake Method
-            ACK = struct.pack('<sI', \
-                "ACK", \
-                packet.pac_id)
-            rf_serial.write(ACK)
+            ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
+            
+            if prog_mode != 2:
+                rf_serial.write(ACK)
+            else:
+                udp_socket.sendto(ACK, addr)
 
             # Print the decoded packet and send to the server
             print(packet)
