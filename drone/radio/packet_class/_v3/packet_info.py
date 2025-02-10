@@ -4,7 +4,7 @@
 
 import struct # For serialization of the data
 import time
-MAX_SEND_TIMEOUT_SEC = 15
+MAX_SEND_TIMEOUT_SEC = 1.5e10 # 15 Seconds
 
 class Packet_Info:
     def __init__(self, serialized_packet, pac_id):
@@ -22,7 +22,7 @@ class Packet_Info:
         return self.sent_time
     
     def check_timeout(self):
-        if time.clock_gettime_ns < self.req_ack_time:
+        if time.time_ns() < self.req_ack_time:
             return False
         else:
             return True

@@ -67,11 +67,12 @@ def receive_and_decode_packets():
                 # Read the serialized data from the RF module
                 data = rf_serial.read(PACKET_SIZE)
 
-            print(f"\nPACKET LENGTH: {len(data)}")
-            print(f'PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
-            if len(data) < PACKET_SIZE:
-                print("Incomplete packet received, skipping...")
-                continue
+            if prog_mode != 0:
+                print(f"\nPACKET LENGTH: {len(data)}")
+                print(f'PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
+                if len(data) < PACKET_SIZE:
+                    print("Incomplete packet received, skipping...")
+                    continue
 
             # Unpack the payload and checksum
             payload = data[:-4]  # setting to all but the sum . . . 
@@ -95,15 +96,16 @@ def receive_and_decode_packets():
             )
 
             # Handshake Method
-            ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
+            # ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
             
-            if prog_mode != 2:
-                rf_serial.write(ACK)
-            else:
-                udp_socket.sendto(ACK, addr)
+            # if prog_mode != 2:
+            #     rf_serial.write(ACK)
+            # else:
+            #     udp_socket.sendto(ACK, addr)
 
             # Print the decoded packet and send to the server
-            print(packet)
+            if prog_mode != 0:
+                print(packet)
             send_packet_to_server(packet)
 
         except struct.error as e:

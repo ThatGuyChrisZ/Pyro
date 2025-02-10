@@ -129,7 +129,7 @@ def data_processing(q2,q3):
 #               queue <thermal_data> (to send_packet())                #                               
 #   Description: Compartmentalize data in packet, serialize,           #
 #                and then send the packet                              #                            
-#   Return: None                     rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER                                  #
+#   Return: None                                                       #
 ########################################################################
 def create_packet(q3, q4):
     global pac_id_to_create
@@ -171,48 +171,87 @@ def create_packet(q3, q4):
 #   Description: Send serialized packets over RF to the GCS            #                            
 #   Return: None                                                       #
 ########################################################################
-def send_packet(q4, q_unack_pac_info, prog_mode):
-    if prog_mode != 0:
-        print(f"SP: prog_mode {prog_mode}")
+def send_packet(q4, q_unack_pac_info, prog_mode, rf_serial):
     pid = os.getpid()
     
-    # Set CPU affinity (only on Linux)
     if hasattr(os, 'sched_setaffinity'):
         os.sched_setaffinity(pid, {3})
-
-    # Create a UDP socket for debug mode
+    
     udp_socket = None
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
+    
     while True:
-        # Normal Operation, send packets . . . 
+        # Send packets if available and no un-ACKed packets exist
         if not q4.empty() and q_unack_pac_info.empty():
-            if prog_mode != 0:
-                print("SP: NORM OP")
             ser_pac_to_send_info = q4.get()
-            if prog_mode != 0:
-                print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PULLED OFF OF Q4")
+            ser_pac_to_send = ser_pac_to_send_info.serialized_packet
+            
+            try:
+                if prog_mode != 2:
+                    rf_serial.flush()
+                    rf_serial.write(ser_pac_to_send)
+                else:
+                    udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
+                
+                ser_pac_to_send_info.set_timestamp(time.time_ns())
+                if prog_mode != 0:
+                    print(f"SP: PACKET {ser_pac_to_send_info.pac_id} SENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-            # Send the serialized packet over RF or UDP
-            transmit_packet(ser_pac_to_send_info, q_unack_pac_info, udp_socket)
-
-        # If waiting on ACKs from packets . . .
+                    pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', ser_pac_to_send[:-4])
+                    sent_packet = Packet(
+                        pac_id=pac_id,
+                        gps_data=[lat, lon],
+                        alt=alt,
+                        high_temp=high_temp,
+                        low_temp=low_temp
+                    )
+                    print(sent_packet)
+                
+                # q_unack_pac_info.put(ser_pac_to_send_info)
+                # if prog_mode != 0:
+                #     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON Q_UNACK_PAC_INFO")
+                
+                # Send ACK request
+                REQ = struct.pack('<3sI', b"REQ", ser_pac_to_send_info.pac_id)
+                if prog_mode != 2:
+                    rf_serial.write(REQ)
+                else:
+                    udp_socket.sendto(REQ, GCS_ADDRESS)
+                if prog_mode != 0:
+                    print(f"SP: PACKET {ser_pac_to_send_info.pac_id} REQ SENT")
+                
+            except serial.SerialException as e:
+                print(f"Failed to send packet: {e}")
+        
+        # Handle incoming ACKs
         elif not q_unack_pac_info.empty():
-            transmit_packet(q_unack_pac_info.get(), q_unack_pac_info, udp_socket)
-
-        # Review incoming ACKs for all packets and pop off the queue
-        try:
-            if prog_mode != 2:
-                inc_ack_pac = rf_serial.read(ACK_PACKET_SIZE)
-            else:
-                inc_ack_pac, addr = udp_socket.recvfrom(ACK_PACKET_SIZE)
-
-            if len(inc_ack_pac) < ACK_PACKET_SIZE:
-                print(f"Warning: Incomplete ACK received ({len(inc_ack_pac)} bytes)")
-        except serial.SerialException as e:
-            print(f"Error reading ACK: {e}")
-
+            try:
+                if prog_mode != 2:
+                    inc_ack_pac = rf_serial.read(ACK_PACKET_SIZE)
+                else:
+                    inc_ack_pac, addr = udp_socket.recvfrom(ACK_PACKET_SIZE)
+                
+                if len(inc_ack_pac) == ACK_PACKET_SIZE:
+                    ack_pac_id = struct.unpack('<I', inc_ack_pac[3:])[0]  # Extract packet ID
+                    
+                    # Remove acknowledged packet from queue
+                    temp_queue = mp.Queue()
+                    while not q_unack_pac_info.empty():
+                        pac_info = q_unack_pac_info.get()
+                        if pac_info.pac_id != ack_pac_id:
+                            temp_queue.put(pac_info)
+                        else:
+                            print(f"Packet {ack_pac_id} acknowledged!")
+                    
+                    while not temp_queue.empty():
+                        q_unack_pac_info.put(temp_queue.get())
+                else:
+                    print(f"Warning: Incomplete ACK received ({len(inc_ack_pac)} bytes)")
+        
+            except serial.SerialException as e:
+                print(f"Error reading ACK: {e}")
+        
         time.sleep(5)
 
 
@@ -292,7 +331,9 @@ if __name__ == '__main__':
         print("TEST_MAIN 1")
 
     prog_mode
-    global rf_serial
+    rf_serial = None
+    if prog_mode != 2:
+        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
     parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
     parser.add_argument("--mode", type=int, help="MODES: 0-Basic | 1-Debug | 2-Local Sys Debug")
     args = parser.parse_args()
@@ -343,7 +384,7 @@ if __name__ == '__main__':
     p1 = mp.Process(target=data_structure_builder, args=(q1,q2,q5))
     p2 = mp.Process(target=data_processing, args=(q2,q3,))
     p3 = mp.Process(target=create_packet, args=(q3, q4,))
-    p4 = mp.Process(target=send_packet, args=(q4,q_unack_pac_info,prog_mode))
+    p4 = mp.Process(target=send_packet, args=(q4,q_unack_pac_info,prog_mode,rf_serial))
     p5 = mp.Process(target=gps_sim, args=(q5,))
 
     # Start threads
@@ -362,7 +403,9 @@ if __name__ == '__main__':
     while True:
         #stamp = time.monotonic()
         try:
-            if prog_mode != 2:			
+            if prog_mode != 2:			# q_unack_pac_info.put(ser_pac_to_send_info)
+                # if prog_mode != 0:
+                #     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON Q_UNACK_PAC_INFO")
                 mlx.getFrame(frame)
             q1.put(frame)
             #print("Main Thread running on core:",os.sched_getaffinity(pid)  )
