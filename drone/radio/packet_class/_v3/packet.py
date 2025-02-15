@@ -5,7 +5,20 @@
 
 import struct # For serialization of the data
 import zlib # checksum/error detection
+import time
+MAX_SEND_TIMEOUT_SEC = 1.5e10 # 15 Seconds
 
+
+
+########################################################################
+#   Class Name: Packet                                                 #
+#   Author: Robb Northrup                                              #
+#   Parameters: pac_id<int>, gps_data<[float, float]>, alt<int>,       #
+#               high_temp<short>, low_temp<short>                      #                               
+#   Description: Simple data structure for holding all related         #
+#                information to a thermal frame for serialization,     #
+#                and then transmission to the GCS                      #
+########################################################################
 class Packet:
     def __init__(self, pac_id, gps_data, alt, high_temp, low_temp):
         self.pac_id = pac_id
@@ -42,3 +55,90 @@ class Packet:
             ALTITUDE - {self.alt}\n \
             HIGH TEMP - {self.high_temp}\n \
             LOW TEMP - {self.low_temp}"
+
+
+
+########################################################################
+#   Class Name: Packet_Info                                            #
+#   Author: Robb Northrup                                              #
+#   Parameters: serialized_packet<serialized packet>, pac_id<int>      #                            
+#   Description: This class holds metadata (time_sent, pac_id,         #
+#                req_ack_time, serialized_packet) for the purposes     #
+#                storing this information in an array in the case      #
+#                of a required selective repeat transmission in the    #
+#                handshake method.                                     #
+########################################################################
+class Packet_Info:
+    def __init__(self, serialized_packet, pac_id):
+        self.serialized_packet = serialized_packet
+        self.pac_id = pac_id
+
+        self.sent_time = None
+        self.req_ack_time = None
+
+    def set_timestamp(self, sent_time):
+        self.sent_time = sent_time
+        self.req_ack_time = self.sent_time + MAX_SEND_TIMEOUT_SEC
+
+    def get_timestamp(self):
+        return self.sent_time
+    
+    def check_timeout(self):
+        if time.time_ns() < self.req_ack_time:
+            return False
+        else:
+            return True
+        
+
+
+########################################################################
+#   Class Name: Packet_Info_Dict                                       #
+#   Author: Robb Northrup                                              #
+#   Parameters: packet_info_instance<Packet_Info>                      #                            
+#   Description: A wrapper for a dictionary that include metadata      #
+#                for packets in the queue waiting for possible         #
+#                retransmission                                        #
+########################################################################
+class Packet_Info_Dict:
+    def __init__(self, packet_info_instance=None):
+        self.master_dictionary = dict()
+
+        if packet_info_instance != None:
+            self.master_dictionary[packet_info_instance.pac_id] = packet_info_instance
+
+    def access(self, pac_id):
+        return self.master_dictionary[pac_id]
+    
+    def peek_top_packet_info(self):
+        # Could be implemented better, possible store top_key with metadata of the class?
+        top_key = next(iter(self.master_dictionary))  # Get the first key
+        return self.master_dictionary[top_key]  # Return top Packet_Info
+    
+    def peek_top_pac_id(self):
+        # Could be implemented better, possible store top_key with metadata of the class?
+        return next(iter(self.master_dictionary))  # Return the first key (pac_id)
+    
+    def check_top_timeout(self):
+        top_packet_info = self.peek_top_packet_info()
+        return top_packet_info.check_timeout()
+
+    def contains(self, pac_id):
+        if pac_id in self.master_dictionary:
+            return True
+        else:
+            return False
+
+    def add(self, packet_info_instance):
+        self.master_dictionary[packet_info_instance.pac_id] = packet_info_instance
+
+    def pop(self, pac_id):
+        if self.contains(pac_id):
+            self.master_dictionary.pop(pac_id)
+        else:
+            pass
+
+    def is_empty(self):
+        if len(self.master_dictionary) == 0:
+            return True
+        else:
+            return False

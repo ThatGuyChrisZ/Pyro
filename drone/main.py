@@ -7,7 +7,8 @@
 # SPDX-FileCopyrightText: 2021 ladyada for Adafruit Industries
 # SPDX-License-Identifier: MIT
 
-prog_mode = 2 # 0: normal runtime
+prog_mode = 2
+          # 0: normal runtime
           # 1: debug mode
           # 2: debug on current system
           #      1.) Intended to have this run on a developer system, on the ride-along board
@@ -15,7 +16,7 @@ prog_mode = 2 # 0: normal runtime
           #          means for debugging purposes
 
 import time
-import sys
+# import sys
 import argparse
 import board
 import busio
@@ -24,17 +25,16 @@ import multiprocessing as mp
 import serial # for serial communication over usb
 import socket # for debug mode, sending data over a UDP socket meant to emulate RF transmission
 import struct
-import zlib
+# import zlib
 import os
 from thermal_data import thermal_data
-from radio.packet_class._v3.packet import Packet
-from radio.packet_class._v3.packet_info import Packet_Info
+from radio.packet_class._v3.packet import Packet, Packet_Info, Packet_Info_Dict
 
 pac_id_to_create = 1 # Global variable for creating the next packet id (don't kill me)
 UNSIGNED_INT_MAX = 2147483647
 
 # rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-ACK_PACKET_SIZE = (3 + 8) # String (of three letters) + integer size
+ACK_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
 GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
 gps_sim_file = open('sim_gps.txt', 'r')
 # alt_sim_file = open('alt_gps.txt', 'r')
@@ -176,6 +176,8 @@ def send_packet(q4, q_unack_pac_info, prog_mode, rf_serial):
     
     if hasattr(os, 'sched_setaffinity'):
         os.sched_setaffinity(pid, {3})
+
+    my_packet_info_dict = Packet_Info_Dict()
     
     udp_socket = None
     if prog_mode == 2:
@@ -183,7 +185,7 @@ def send_packet(q4, q_unack_pac_info, prog_mode, rf_serial):
     
     while True:
         # Send packets if available and no un-ACKed packets exist
-        if not q4.empty() and q_unack_pac_info.empty():
+        if not q4.empty() and my_packet_info_dict.is_empty():
             ser_pac_to_send_info = q4.get()
             ser_pac_to_send = ser_pac_to_send_info.serialized_packet
             
@@ -208,49 +210,108 @@ def send_packet(q4, q_unack_pac_info, prog_mode, rf_serial):
                     )
                     print(sent_packet)
                 
-                # q_unack_pac_info.put(ser_pac_to_send_info)
-                # if prog_mode != 0:
-                #     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON Q_UNACK_PAC_INFO")
-                
-                # Send ACK request
-                REQ = struct.pack('<3sI', b"REQ", ser_pac_to_send_info.pac_id)
-                if prog_mode != 2:
-                    rf_serial.write(REQ)
-                else:
-                    udp_socket.sendto(REQ, GCS_ADDRESS)
+                # ---------------- #
+                # HANDSHAKE METHOD #
+                # ---------------- #
+                my_packet_info_dict.add(ser_pac_to_send_info)
                 if prog_mode != 0:
-                    print(f"SP: PACKET {ser_pac_to_send_info.pac_id} REQ SENT")
+                    print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON PACKET_INFO_DICT")
+                
                 
             except serial.SerialException as e:
                 print(f"Failed to send packet: {e}")
         
         # Handle incoming ACKs
-        elif not q_unack_pac_info.empty():
+        elif not my_packet_info_dict.is_empty():
+            inc_ack_pac = None # To be set in the following lines based off of mode (RF/UDP socket)
+
+            if prog_mode != 0:
+                print("SP: my_packet_info_dict has unACKed pac")
+
+            # Send REQ for timed out packets
+            if my_packet_info_dict.check_top_timeout() is True:
+                # REQ = struct.pack('<3sI', b"REQ", my_packet_info_dict.peek_top_pac_id())
+                # if prog_mode != 2:
+                #     rf_serial.write(REQ)
+                # else:
+                #     udp_socket.sendto(REQ, GCS_ADDRESS)
+                # if prog_mode != 0:
+                #     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} REQ SENT")
+                
+                ser_pac_to_send_info = my_packet_info_dict.peek_top_packet_info()
+                ser_pac_to_send = ser_pac_to_send_info.serialized_packet
+                my_packet_info_dict.pop(ser_pac_to_send_info.pac_id) # remove from dictionary (to be added again once resent)
+
+                if prog_mode != 0:
+                    print(f"SP: PACKET {my_packet_info_dict.peek_top_pac_id()} TIMED OUT, RESENDING . . .")
+            
+                try:
+                    if prog_mode != 2:
+                        rf_serial.flush()
+                        rf_serial.write(ser_pac_to_send)
+                    else:
+                        udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
+                    
+                    ser_pac_to_send_info.set_timestamp(time.time_ns())
+                    if prog_mode != 0:
+                        print(f"SP: PACKET {ser_pac_to_send_info.pac_id} SENT AT {ser_pac_to_send_info.get_timestamp()}")
+
+                        pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', ser_pac_to_send[:-4])
+                        sent_packet = Packet(
+                            pac_id=pac_id,
+                            gps_data=[lat, lon],
+                            alt=alt,
+                            high_temp=high_temp,
+                            low_temp=low_temp
+                        )
+                        print(sent_packet)
+                    
+                    # ---------------- #
+                    # HANDSHAKE METHOD #
+                    # ---------------- #
+                    my_packet_info_dict.add(ser_pac_to_send_info)
+                    if prog_mode != 0:
+                        print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON PACKET_INFO_DICT")
+
+                except serial.SerialException as e:
+                    print(f"Failed to send packet: {e}")
+
+            # Attempt to remove packets off the dict queue
             try:
+                print("eek1")
                 if prog_mode != 2:
                     inc_ack_pac = rf_serial.read(ACK_PACKET_SIZE)
+                    print('eek2')
                 else:
+                    print('eek3')
+                    # BROKEN LINE OF CODE!!!!
                     inc_ack_pac, addr = udp_socket.recvfrom(ACK_PACKET_SIZE)
                 
-                if len(inc_ack_pac) == ACK_PACKET_SIZE:
-                    ack_pac_id = struct.unpack('<I', inc_ack_pac[3:])[0]  # Extract packet ID
+                print("eajdklajfl")
+                if prog_mode != 2:
+                    print("SP: Reading for ACKs off of rf/udp")
+                
+                if inc_ack_pac is None:
+                    if prog_mode != 0:
+                        print("SP: Waiting on ACK for packets . . .")
+                elif len(inc_ack_pac) == ACK_PACKET_SIZE:
+                    inc_ack_pac_id = struct.unpack('<I', inc_ack_pac[3:])[0]  # Extract packet ID
                     
                     # Remove acknowledged packet from queue
-                    temp_queue = mp.Queue()
-                    while not q_unack_pac_info.empty():
-                        pac_info = q_unack_pac_info.get()
-                        if pac_info.pac_id != ack_pac_id:
-                            temp_queue.put(pac_info)
-                        else:
-                            print(f"Packet {ack_pac_id} acknowledged!")
-                    
-                    while not temp_queue.empty():
-                        q_unack_pac_info.put(temp_queue.get())
+                    if not my_packet_info_dict.is_empty():
+                        my_packet_info_dict.pop(inc_ack_pac_id)
+                    else: # if recieved ACK for a packet that is not held in dict
+                        # IMPLEMENT MEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE!
+                        pass
                 else:
                     print(f"Warning: Incomplete ACK received ({len(inc_ack_pac)} bytes)")
         
             except serial.SerialException as e:
                 print(f"Error reading ACK: {e}")
+
+        # if q4 and packet_info_dict are empty . . .
+        else:
+            pass
         
         time.sleep(5)
 
@@ -314,8 +375,88 @@ def transmit_packet(ser_pac_to_send_info, q_unack_pac_info, udp_socket):
             print(f"Error unpacking payload: {e}")
 
 
+
+def receive_and_decode(my_packet_info_dict, prog_mode):
+    # UDP socket debug mode (local)
+    if prog_mode == 2:
+        udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp_socket.bind(("0.0.0.0", UDP_PORT))
+        print(f"Listening for packets on UDP Port {UDP_PORT}...")
+
+    # Mode 0|1: Read from RF serial
+    else:
+        try:
+            # Open the serial port connected to the RF module
+            print(f"Listening for packets on /dev/ttyUSB{rf_serial_usb_port}...")
+        except serial.SerialException as e:
+            print(f"Error opening serial port: {e}")
+            return
+        
+    # Program loop for receiving, deserializing, sending ACKs, and shipping
+    # off packets to the send_packet_to_server() method
+    while True:
+        try:
+            # Receive the data off the bus
+            if prog_mode == 2:
+                data, addr = udp_socket.recvfrom(PACKET_SIZE)
+                print(f"Received packet from {addr}")
+            # Read the serialized data from the RF module
+            else:
+                data = rf_serial.read(PACKET_SIZE)
+
+            if prog_mode != 0:
+                print(f"\nPACKET LENGTH: {len(data)}")
+                print(f'PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
+                if len(data) < PACKET_SIZE:
+                    print("Incomplete packet received, skipping...")
+                    continue
+
+            # Unpack the payload and checksum
+            payload = data[:-4]  # setting to all but the sum . . . 
+            received_checksum = struct.unpack('<I', data[-4:])[0] # and here we check that sum
+
+            computed_checksum = zlib.crc32(payload)
+
+            if computed_checksum != received_checksum:
+                print(f"Checksum mismatch! Packet corrupted. \\ COMPUTED:{computed_checksum}, RECEIVED: {received_checksum}")
+                continue
+
+            # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
+            pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', payload)
+
+            packet = Packet(
+                pac_id=pac_id,
+                gps_data=[lat, lon],
+                alt=alt,
+                high_temp=high_temp,
+                low_temp=low_temp
+            )
+
+            # ---------------- #
+            # HANDSHAKE METHOD #
+            # ---------------- #
+            ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
+            
+            if prog_mode != 2:
+                rf_serial.write(ACK)
+            else:
+                udp_socket.sendto(ACK, addr)
+
+            # Print the decoded packet and send to the server
+            if prog_mode != 0:
+                print(packet)
+            send_packet_to_server(packet)
+
+        except struct.error as e:
+            print(f"Error decoding packet: {e}")
+        except serial.SerialException as e:
+            print(f"Serial communication error: {e}")
+
+
+
+
 ########################################################################
-#   Function Name: main                                                #
+#   Function Name: __main__()                                          #
 #   Author: Chris Zinser                                               #
 #   Parameters:  none                                                  #                               
 #   Description: This is the main thread for the program. This thread  #
@@ -326,19 +467,20 @@ def transmit_packet(ser_pac_to_send_info, q_unack_pac_info, udp_socket):
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
-    if prog_mode != 0:
-        print(f"RUNNING IN PROG MODE: {prog_mode}")
-        print("TEST_MAIN 1")
-
-    prog_mode
+    prog_mode = 0
     rf_serial = None
-    if prog_mode != 2:
-        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+
     parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
     parser.add_argument("--mode", type=int, help="MODES: 0-Basic | 1-Debug | 2-Local Sys Debug")
     args = parser.parse_args()
     if args.mode is not None:  # Avoid overwriting if mode isn't provided
         prog_mode = args.mode
+    if prog_mode != 2:
+        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+
+    if prog_mode != 0:
+        print(f"RUNNING IN PROG MODE: {prog_mode}")
+        print("TEST_MAIN 1")
 
     pid = os.getpid()
     os.sched_setaffinity(pid, {0})

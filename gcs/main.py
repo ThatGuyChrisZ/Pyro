@@ -1,19 +1,24 @@
 import struct
 import zlib
-import sys
 import serial
 import socket # For UDP socket transmission in MODE 2
-import json
 import requests
+import argparse
 from packet_class._v2.packet import Packet
 
 PACKET_SIZE = 24  # ADJUST?
-ACK_PACKET_SIZE = (3 + 8) # String (of three letters) + integer size
+REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 
-prog_mode = 2 # Change this to run in a different mode
 
-# Possible function to forward packets to server alongside Robb's current implementation in receive_and_decode_packets
+
+########################################################################
+#   Function Name: receive_and_decode_packets()                        #
+#   Author: Ashton Westenburg                                          #
+#   Parameters:                                                        #                               
+#   Description:                                                       #
+#   Return:                                                            #
+########################################################################
 def send_packet_to_server(packet):
     """Sends the decoded packet to the server."""
     server_url = "http://localhost:8000/add_packet"  # Current Server Location
@@ -34,6 +39,8 @@ def send_packet_to_server(packet):
     except requests.RequestException as e:
         print(f"Error connecting to the server: {e}")
 
+
+
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #
 #   Author: Robb Northrup                                              #
@@ -42,29 +49,32 @@ def send_packet_to_server(packet):
 #                and send the packets to send_packet_to_server()       #                                                              #
 #   Return: None                                                       #
 ########################################################################
-def receive_and_decode_packets():
+def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
+    # UDP socket debug mode (local)
     if prog_mode == 2:
-        # UDP socket debug mode (local)
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp_socket.bind(("0.0.0.0", UDP_PORT))
         print(f"Listening for packets on UDP Port {UDP_PORT}...")
-    else: # Mode 0|1: Read from RF serial
-        # Open the serial port connected to the RF module
+
+    # Mode 0|1: Read from RF serial
+    else:
         try:
-            rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-            print("Listening for packets on /dev/ttyUSB0...")
+            # Open the serial port connected to the RF module
+            print(f"Listening for packets on /dev/ttyUSB{rf_serial_usb_port}...")
         except serial.SerialException as e:
             print(f"Error opening serial port: {e}")
             return
-
+        
+    # Program loop for receiving, deserializing, sending ACKs, and shipping
+    # off packets to the send_packet_to_server() method
     while True:
         try:
             # Receive the data off the bus
             if prog_mode == 2:
                 data, addr = udp_socket.recvfrom(PACKET_SIZE)
                 print(f"Received packet from {addr}")
+            # Read the serialized data from the RF module
             else:
-                # Read the serialized data from the RF module
                 data = rf_serial.read(PACKET_SIZE)
 
             if prog_mode != 0:
@@ -95,13 +105,15 @@ def receive_and_decode_packets():
                 low_temp=low_temp
             )
 
-            # Handshake Method
-            # ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
+            # ---------------- #
+            # HANDSHAKE METHOD #
+            # ---------------- #
+            ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
             
-            # if prog_mode != 2:
-            #     rf_serial.write(ACK)
-            # else:
-            #     udp_socket.sendto(ACK, addr)
+            if prog_mode != 2:
+                rf_serial.write(ACK)
+            else:
+                udp_socket.sendto(ACK, addr)
 
             # Print the decoded packet and send to the server
             if prog_mode != 0:
@@ -113,5 +125,29 @@ def receive_and_decode_packets():
         except serial.SerialException as e:
             print(f"Serial communication error: {e}")
 
+
+
+########################################################################
+#   Function Name: __main__()                                          #
+#   Author: Robb Northrup                                              #
+#   Parameters:                                                        #                               
+#   Description:                                                       #
+#   Return: None                                                       #
+########################################################################
 if __name__ == '__main__':
-    receive_and_decode_packets()
+    prog_mode = 0 # Default mode is normal (not debugging)
+    rf_serial = None
+    usb_port_trans = None
+
+    parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
+    parser.add_argument("--mode", type=int, help="MODES: 0-Basic | 1-Debug | 2-Local Sys Debug")
+    args = parser.parse_args()
+    if args.mode is not None:  # Avoid overwriting if mode isn't provided
+        prog_mode = args.mode
+    if prog_mode != 2:
+        usb_port_trans = input("Enter the usb port the tranceiver is plugged into (type /'q/' to exit): ")
+    
+    if usb_port_trans == 'q':
+        quit()
+    else:
+        receive_and_decode_packets(prog_mode, rf_serial, usb_port_trans)
