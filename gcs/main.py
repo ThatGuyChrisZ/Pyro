@@ -108,6 +108,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
             # ---------------- #
             # HANDSHAKE METHOD #
             # ---------------- #
+            # add CHECKSUM
             ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
             
             if prog_mode != 2:

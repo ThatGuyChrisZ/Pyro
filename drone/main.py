@@ -25,7 +25,7 @@ import multiprocessing as mp
 import serial # for serial communication over usb
 import socket # for debug mode, sending data over a UDP socket meant to emulate RF transmission
 import struct
-# import zlib
+import zlib
 import os
 from thermal_data import thermal_data
 from radio.packet_class._v3.packet import Packet, Packet_Info, Packet_Info_Dict
@@ -37,6 +37,7 @@ UNSIGNED_INT_MAX = 2147483647
 ACK_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
 GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
 gps_sim_file = open('sim_gps.txt', 'r')
+UDP_PORT = 5004
 # alt_sim_file = open('alt_gps.txt', 'r')
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
 
@@ -171,13 +172,11 @@ def create_packet(q3, q4):
 #   Description: Send serialized packets over RF to the GCS            #                            
 #   Return: None                                                       #
 ########################################################################
-def send_packet(q4, q_unack_pac_info, prog_mode, rf_serial):
+def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial):
     pid = os.getpid()
     
     if hasattr(os, 'sched_setaffinity'):
         os.sched_setaffinity(pid, {3})
-
-    my_packet_info_dict = Packet_Info_Dict()
     
     udp_socket = None
     if prog_mode == 2:
@@ -376,7 +375,14 @@ def transmit_packet(ser_pac_to_send_info, q_unack_pac_info, udp_socket):
 
 
 
-def receive_and_decode(my_packet_info_dict, prog_mode):
+########################################################################
+#   Function Name: receive_and_decode()                                #
+#   Author: Robb Northrup                                              #
+#   Parameters:                                                        #                               
+#   Description:                                                       #                            
+#   Return: None                                                       #
+########################################################################
+def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port):
     # UDP socket debug mode (local)
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -392,22 +398,22 @@ def receive_and_decode(my_packet_info_dict, prog_mode):
             print(f"Error opening serial port: {e}")
             return
         
-    # Program loop for receiving, deserializing, sending ACKs, and shipping
-    # off packets to the send_packet_to_server() method
+    # Program loop for receiving, deserializing, receiving ACKs, and taking it off
+    # the my_packet_info_dict
     while True:
         try:
             # Receive the data off the bus
             if prog_mode == 2:
-                data, addr = udp_socket.recvfrom(PACKET_SIZE)
+                data, addr = udp_socket.recvfrom(ACK_PACKET_SIZE)
                 print(f"Received packet from {addr}")
             # Read the serialized data from the RF module
             else:
-                data = rf_serial.read(PACKET_SIZE)
+                data = rf_serial.read(ACK_PACKET_SIZE)
 
             if prog_mode != 0:
                 print(f"\nPACKET LENGTH: {len(data)}")
                 print(f'PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
-                if len(data) < PACKET_SIZE:
+                if len(data) < ACK_PACKET_SIZE:
                     print("Incomplete packet received, skipping...")
                     continue
 
@@ -455,6 +461,15 @@ def receive_and_decode(my_packet_info_dict, prog_mode):
 
 
 
+class MyManager(mp.managers.BaseManager):
+    pass
+
+MyManager.register('Packet_Info_Dict', Packet_Info_Dict)
+
+def worker(shared_packet_dict):
+    pass
+
+
 ########################################################################
 #   Function Name: __main__()                                          #
 #   Author: Chris Zinser                                               #
@@ -467,8 +482,22 @@ def receive_and_decode(my_packet_info_dict, prog_mode):
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
+    mp.set_start_method('spawn')    # 'spawn' : for windows deployment (and safe on linux)
+                                    #           + safer for I/O bound and thread-sensitive tasks
+                                    #           + safer with multithreading and c-extension libaries
+                                    #           + avoids unpredictable behavior of 'fork with shared objects
+                                    #             and in the mp.Manager()
+                                    #           + fresh, clean process w/o inheriting unnecesary parent resources
+                                    #           - slower process than 'fork', new Python interpreter
+                                    #           - everything passed to child processes
+                                    #           - extra memory usage
+                                    #           - worse for CPU-bound processes, slower
+                                    # 'fork' : opposite of 'spawn' (see above)
+                                    # 'forkserver' : good compromise of 'spawn' and 'fork' (only compatible with unix-based systems)
+
     prog_mode = 0
     rf_serial = None
+    my_packet_info_dict = Packet_Info_Dict()
 
     parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
     parser.add_argument("--mode", type=int, help="MODES: 0-Basic | 1-Debug | 2-Local Sys Debug")
@@ -508,48 +537,64 @@ if __name__ == '__main__':
     if prog_mode != 2:
         mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
     frame = [0] * 768
-    mp.set_start_method('spawn')
 
     # Initialize shared memory between queues
     if prog_mode != 0:
         print("TEST_MAIN 3")
-    q1 = mp.Queue()
-    q2 = mp.Queue()
-    q3 = mp.Queue()
-    q4 = mp.Queue()
-    q5 = mp.Queue()  # simulation queue
-    q_unack_pac_info = mp.Queue() # queue for holding un-ACKed packets
 
-    # Initialize threads for processing and transmitting radio data
-    if prog_mode != 0:
-        print("TEST_MAIN 4")
-    p1 = mp.Process(target=data_structure_builder, args=(q1,q2,q5))
-    p2 = mp.Process(target=data_processing, args=(q2,q3,))
-    p3 = mp.Process(target=create_packet, args=(q3, q4,))
-    p4 = mp.Process(target=send_packet, args=(q4,q_unack_pac_info,prog_mode,rf_serial))
-    p5 = mp.Process(target=gps_sim, args=(q5,))
+    # =============================
+    # Note on "mp.Manager()" usage:
+    # =============================
+    #   This is new to the radio v3 build where I need a shared instance of
+    #   my_packet_info_dict to keep track of unacknowledged, sent packets
+    #   (for retransmission should they timeout).
+    #
+    #   This is a slower, but necessary means of sharing mutable objects between
+    #   proccesses (it is managed via a server proccess, which itself introduces
+    #   overhead).
+    #
+    #   POSSIBLE ALTERNATIVE SOLUTION?
 
-    # Start threads
-    if prog_mode != 0:
-        print("TEST_MAIN 5")
-    p1.start()
-    p2.start()
-    p3.start()
-    p4.start()
-    p5.start()
-    
-    #print(q.get())
-    #p.join()
-    
-    #Frame retrieval from mlx 90640
-    while True:
-        #stamp = time.monotonic()
-        try:
-            if prog_mode != 2:			# q_unack_pac_info.put(ser_pac_to_send_info)
-                # if prog_mode != 0:
-                #     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON Q_UNACK_PAC_INFO")
-                mlx.getFrame(frame)
-            q1.put(frame)
-            #print("Main Thread running on core:",os.sched_getaffinity(pid)  )
-        except ValueError:
-            continue
+    with MyManager() as manager:
+        my_packet_info_dict = manager.Packet_Info_dict() # Create shared instance of dict
+
+        q1 = mp.Queue()
+        q2 = mp.Queue()
+        q3 = mp.Queue()
+        q4 = mp.Queue()
+        q5 = mp.Queue() # simulation queue
+
+        # Initialize threads for processing and transmitting radio data
+        if prog_mode != 0:
+            print("TEST_MAIN 4")
+        p1 = mp.Process(target=data_structure_builder, args=(q1,q2,q5))
+        p2 = mp.Process(target=data_processing, args=(q2,q3,))
+        p3 = mp.Process(target=create_packet, args=(q3,q4,))
+        p4 = mp.Process(target=send_packet, args=(q4,my_packet_info_dict,prog_mode,rf_serial))
+        p5 = mp.Process(target=gps_sim, args=(q5,))
+        p_recieve_packets = mp.Process(target=receive_and_decode, args=(my_packet_info_dict,prog_mode,rf_serial,))
+
+        # Start threads
+        if prog_mode != 0:
+            print("TEST_MAIN 5")
+        p1.start()
+        p2.start()
+        p3.start()
+        p4.start()
+        p5.start()
+        
+        #print(q.get())
+        #p.join()
+        
+        #Frame retrieval from mlx 90640
+        while True:
+            #stamp = time.monotonic()
+            try:
+                if prog_mode != 2:			# q_unack_pac_info.put(ser_pac_to_send_info)
+                    # if prog_mode != 0:
+                    #     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON Q_UNACK_PAC_INFO")
+                    mlx.getFrame(frame)
+                q1.put(frame)
+                #print("Main Thread running on core:",os.sched_getaffinity(pid)  )
+            except ValueError:
+                continue
