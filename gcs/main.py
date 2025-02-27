@@ -1,3 +1,9 @@
+###########################################################################
+#                                                                         #
+#            Contributed by Robb Northrup, Ashton Westenburg              #
+#                                                                         #
+###########################################################################
+
 import struct
 import zlib
 import serial
@@ -8,6 +14,7 @@ from packet_class._v2.packet import Packet
 
 PACKET_SIZE = 24  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
+DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 
 
@@ -54,15 +61,15 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp_socket.bind(("0.0.0.0", UDP_PORT))
-        print(f"Listening for packets on UDP Port {UDP_PORT}...")
+        print(f"RD: Listening for packets on UDP Port {UDP_PORT}...")
 
     # Mode 0|1: Read from RF serial
     else:
         try:
             # Open the serial port connected to the RF module
-            print(f"Listening for packets on /dev/ttyUSB{rf_serial_usb_port}...")
+            print(f"RD: Listening for packets on /dev/ttyUSB{rf_serial_usb_port}...")
         except serial.SerialException as e:
-            print(f"Error opening serial port: {e}")
+            print(f"RD: Error opening serial port: {e}")
             return
         
     # Program loop for receiving, deserializing, sending ACKs, and shipping
@@ -115,6 +122,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
                 rf_serial.write(ACK)
             else:
                 udp_socket.sendto(ACK, addr)
+                print(f"RD: ACK for ID {packet.pac_id} sent to {addr}")
 
             # Print the decoded packet and send to the server
             if prog_mode != 0:
@@ -122,9 +130,9 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
             send_packet_to_server(packet)
 
         except struct.error as e:
-            print(f"Error decoding packet: {e}")
+            print(f"RD: Error decoding packet: {e}")
         except serial.SerialException as e:
-            print(f"Serial communication error: {e}")
+            print(f"RD: Serial communication error: {e}")
 
 
 

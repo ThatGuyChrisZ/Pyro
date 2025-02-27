@@ -83,6 +83,9 @@ class Packet_Info:
     def get_timestamp(self):
         return self.sent_time
     
+    def get_pac_id(self):
+        return self.pac_id
+    
     def check_timeout(self):
         if time.time_ns() < self.req_ack_time:
             return False
@@ -119,8 +122,11 @@ class Packet_Info_Dict:
         return next(iter(self.master_dictionary))  # Return the first key (pac_id)
     
     def check_top_timeout(self):
-        top_packet_info = self.peek_top_packet_info()
-        return top_packet_info.check_timeout()
+        if self.is_empty():
+            return False
+        else:
+            top_packet_info = self.peek_top_packet_info()
+            return top_packet_info.check_timeout()
 
     def contains(self, pac_id):
         if pac_id in self.master_dictionary:
