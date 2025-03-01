@@ -10,9 +10,10 @@ from database import init_db
 # Initialize database before accessing it
 init_db()
 
-# Firebase Configuration
+# Firebase Config
 FIREBASE_CONFIG_PATH = "firebase_credentials.json"
 DATABASE_PATH = "wildfire_data.db"
+FIREBASE_DB_URL = "https://pyro-fire-tracking-default-rtdb.firebaseio.com/"
 
 # Check if Firebase is already initialized
 if not firebase_admin._apps:
@@ -24,6 +25,7 @@ class GroundControlUI(QWidget):
         super().__init__()
 
         self.server_process = None
+        self.main_process = None 
 
         self.setWindowTitle("Ground Control UI")
         self.setGeometry(100, 100, 600, 400)
@@ -55,28 +57,56 @@ class GroundControlUI(QWidget):
         self.load_logs()
 
     def start_server(self):
-        """Start server.py for receiving data"""
-        if self.server_process is None:
-            self.server_process = subprocess.Popen(["python", "server.py"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            self.logs_text.append("✅ Server started... Receiving data.")
-        else:
-            self.logs_text.append("⚠ Server is already running.")
+        if self.server_process is None and self.main_process is None:
+            try:
+                self.logs_text.clear()
+                self.logs_text.append("🛠 Starting main.py and server.py...")
+
+                BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+                self.main_process = subprocess.Popen(
+                    ["python", os.path.join(BASE_DIR, "main.py")],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+
+                self.server_process = subprocess.Popen(
+                    ["python", os.path.join(BASE_DIR, "server.py")],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+
+                _, server_error = self.server_process.communicate(timeout=5)
+
+                if server_error:
+                    self.logs_text.append(f"❌ Server Error:\n{server_error}")
+                    print(f"❌ Server Error:\n{server_error}")
+
+                self.logs_text.append("✅ Data reception started")
+
+            except subprocess.TimeoutExpired:
+                self.logs_text.append("⚠ Server took too long to start.")
+            except Exception as e:
+                self.logs_text.append(f"❌ Failed to start processes: {e}")
 
     def stop_server(self):
-        """Stop server.py if running"""
-        if self.server_process:
-            self.server_process.terminate()
-            self.server_process = None
-            self.logs_text.append("❌ Server stopped.")
-        else:
-            self.logs_text.append("⚠ Server is not running.")
+        if self.server_process or self.main_process:
+            if self.main_process:
+                self.main_process.terminate()
+                self.main_process = None
+            if self.server_process:
+                self.server_process.terminate()
+                self.server_process = None
+            self.logs_text.append("❌ Data reception stopped")
+
 
     def load_logs(self):
-        """Load last received data from SQLite database"""
         try:
             conn = sqlite3.connect(DATABASE_PATH)
             cursor = conn.cursor()
-            cursor.execute("SELECT name, latitude, longitude, high_temp, low_temp, status FROM wildfires ORDER BY id DESC LIMIT 10")
+            cursor.execute("SELECT name, latitude, longitude, high_temp, low_temp, status , sync_status FROM wildfires ORDER BY id DESC LIMIT 10")
             data = cursor.fetchall()
             conn.close()
 
@@ -90,7 +120,6 @@ class GroundControlUI(QWidget):
             self.logs_text.append(f"❌ Database error: {e}\nMake sure the server is started first.")
 
     def sync_to_firebase(self):
-        """Sync locally stored wildfire data to Firebase when online"""
         try:
             if not os.path.exists(FIREBASE_CONFIG_PATH):
                 self.logs_text.append("⚠ Firebase credentials missing.")
@@ -99,11 +128,11 @@ class GroundControlUI(QWidget):
             # Initialize Firebase
             if not firebase_admin._apps:
                 cred = credentials.Certificate(FIREBASE_CONFIG_PATH)
-                firebase_admin.initialize_app(cred, {"databaseURL": "https://your-project-id.firebaseio.com/"})
+                firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_DB_URL})
 
             conn = sqlite3.connect(DATABASE_PATH)
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM wildfires WHERE status = 'pending'")
+            cursor.execute("SELECT * FROM wildfires WHERE sync_status = 'pending'")
             unsynced_data = cursor.fetchall()
 
             if not unsynced_data:
@@ -119,9 +148,10 @@ class GroundControlUI(QWidget):
                         "high_temp": row[6],
                         "low_temp": row[7],
                         "status": "active",
+                        "sync_status": "pending"
                     }
                     ref.push(fire_data)
-                    cursor.execute("UPDATE wildfires SET status = 'synced' WHERE id = ?", (row[0],))
+                    cursor.execute("UPDATE wildfires SET sync_status = 'synced' WHERE id = ?", (row[0],))
 
                 conn.commit()
                 self.logs_text.append("✅ Data synced successfully!")

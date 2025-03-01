@@ -66,15 +66,13 @@ def insert_wildfire_data(name: str, latitude: float, longitude: float, high_temp
     conn.close()
 
 def is_data_in_firebase(name, date_received, time_received):
-    """Check if wildfire data exists in Firebase using one API call."""
+    """Check if wildfire data exists in Firebase"""
     try:
-        existing_data = firebase_ref.get()  # Fetch all data at once
+        existing_data = firebase_ref.child("wildfires").get()
 
-        if existing_data:
+        if isinstance(existing_data, dict):
             for key, fire in existing_data.items():
-                if (fire.get("name") == name and
-                        fire.get("date_received") == date_received and
-                        fire.get("time_received") == time_received):
+                if isinstance(fire, dict) and fire.get("name") == name and fire.get("date_received") == date_received and fire.get("time_received") == time_received:
                     return True
 
         return False
@@ -82,6 +80,7 @@ def is_data_in_firebase(name, date_received, time_received):
     except Exception as e:
         print(f"⚠ Firebase query failed: {e}")
         return False
+    
 
 def sync_to_firebase():
     """Sync all pending SQLite data to Firebase using batch writes."""
@@ -93,10 +92,10 @@ def sync_to_firebase():
     unsynced_data = cursor.fetchall()
 
     if not unsynced_data:
-        print("✅ No new data to sync.")
+        print("No new data to sync.")
         return
 
-    print(f"🔥 Found {len(unsynced_data)} pending records to sync...")
+    print(f"Found {len(unsynced_data)} pending records to sync...")
 
     batch_data = {}
     ids_to_update = []
@@ -123,13 +122,13 @@ def sync_to_firebase():
     if batch_data:
         try:
             firebase_ref.update(batch_data) 
-            print(f"✅ Successfully synced {len(batch_data)} records to Firebase.")
+            print(f"Successfully synced {len(batch_data)} records to Firebase.")
 
             cursor.executemany("UPDATE wildfires SET sync_status = 'synced' WHERE id = ?", [(id,) for id in ids_to_update])
             conn.commit()
 
         except Exception as e:
-            print(f"❌ Failed to sync batch: {e}")
+            print(f"Failed to sync batch: {e}")
 
     conn.close()
 
@@ -173,7 +172,7 @@ def process_packet(packet, name, status="active"):
         sync_thread.start()
 
     except Exception as e:
-        print(f"❌ Error processing packet: {e}")
+        print(f"Error processing packet: {e}")
 
 def fetch_wildfire_data(name: Optional[str] = None, date: Optional[str] = None, time: Optional[str] = None) -> List[Tuple]:
     """Fetch wildfire data from SQLite."""
