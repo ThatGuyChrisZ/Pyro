@@ -17,7 +17,6 @@ if not firebase_admin._apps:
     cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
     firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_DB_URL})
 
-# Firebase Database Reference
 firebase_ref = db.reference("wildfires")
 
 def init_db():
@@ -25,10 +24,9 @@ def init_db():
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
     
-    # Enable Write-Ahead Logging mode
     cursor.execute("PRAGMA journal_mode=WAL;")
     
-    # Create the wildfires table with sync_status column
+    # sync_status refers to whether data is synced to Firebase
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS wildfires (
@@ -43,7 +41,7 @@ def init_db():
             date_received STRING,
             time_received STRING,
             status TEXT DEFAULT 'active',
-            sync_status TEXT DEFAULT 'pending'  -- New column to track Firebase sync status
+            sync_status TEXT DEFAULT 'pending'  
         )
         """
     )
@@ -77,13 +75,13 @@ def is_data_in_firebase(name, date_received, time_received):
                 if (fire.get("name") == name and
                         fire.get("date_received") == date_received and
                         fire.get("time_received") == time_received):
-                    return True  # Data already exists in Firebase
+                    return True
 
-        return False  # No match found
+        return False
 
     except Exception as e:
         print(f"⚠ Firebase query failed: {e}")
-        return False  # Assume no data exists if query fails
+        return False
 
 def sync_to_firebase():
     """Sync all pending SQLite data to Firebase using batch writes."""
@@ -100,8 +98,8 @@ def sync_to_firebase():
 
     print(f"🔥 Found {len(unsynced_data)} pending records to sync...")
 
-    batch_data = {}  # Dictionary for batch upload
-    ids_to_update = []  # IDs of records to mark as 'synced'
+    batch_data = {}
+    ids_to_update = []
 
     for row in unsynced_data:
         fire_data = {
@@ -119,15 +117,14 @@ def sync_to_firebase():
 
         # Add to batch only if it doesn't already exist in Firebase
         if not is_data_in_firebase(fire_data["name"], fire_data["date_received"], fire_data["time_received"]):
-            batch_data[f"wildfires/{row[0]}"] = fire_data  # Store using unique ID
+            batch_data[f"wildfires/{row[0]}"] = fire_data 
             ids_to_update.append(row[0])
 
     if batch_data:
         try:
-            firebase_ref.update(batch_data)  # Batch update in ONE request
+            firebase_ref.update(batch_data) 
             print(f"✅ Successfully synced {len(batch_data)} records to Firebase.")
 
-            # Mark synced records as 'synced' in SQLite
             cursor.executemany("UPDATE wildfires SET sync_status = 'synced' WHERE id = ?", [(id,) for id in ids_to_update])
             conn.commit()
 
@@ -171,7 +168,7 @@ def process_packet(packet, name, status="active"):
 
         update_fire_status(name, latitude, longitude, high_temp, low_temp, alt)
 
-        # Run Firebase sync in parallel thread to prevent blocking
+        # Run Firebase sync in parallel thread
         sync_thread = Thread(target=sync_to_firebase)
         sync_thread.start()
 

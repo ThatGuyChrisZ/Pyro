@@ -11,6 +11,7 @@ let currentGradient = {
 
 let map;
 let heatLayer;
+const DEFAULT_FOV = 55;
 
 document.getElementById("fire-title").textContent = fireName || "Unknown Fire";
 
@@ -59,6 +60,20 @@ async function initializeMap() {
     loadFireHeatmap();
 }
 
+function calculateRadius(altitude, fov = DEFAULT_FOV) {
+    if (!altitude || altitude <= 0) return 10;
+
+    const fovRadians = (fov * Math.PI) / 180;
+    const groundCoverage = 2 * (altitude * Math.tan(fovRadians / 2)); // Calculate ground coverage
+    feetPerPixel = 513,468 / (2^maxZoom);
+
+    let radius = groundCoverage / feetPerPixel;
+    print(radius);
+
+    // Clamp radius to avoid extreme values
+    return Math.max(100, Math.min(radius, 1000));
+}
+
 async function loadFireHeatmap() {
 
     console.log("test");
@@ -94,8 +109,12 @@ async function loadFireHeatmap() {
 
         if (heatLayer) map.removeLayer(heatLayer);
 
+        // For now, using a global radius calculation 
+        const totalAltitude = heatmapData.reduce((sum, p) => sum + p.altitude, 0);
+        const avgAltitude = totalAltitude / heatmapData.length;
+
         heatLayer = L.heatLayer(normalizedData, {
-            radius: 50,
+            radius: calculateRadius(avgAltitude),
             blur: 35,
             gradient: currentGradient,
         }).addTo(map);

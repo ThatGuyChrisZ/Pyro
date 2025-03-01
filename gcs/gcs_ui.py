@@ -5,7 +5,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, db
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLabel
-from database import init_db  # Ensure database is initialized
+from database import init_db
 
 # Initialize database before accessing it
 init_db()
@@ -23,15 +23,13 @@ class GroundControlUI(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.server_process = None  # For handling server.py process
+        self.server_process = None
 
-        # UI Layout
         self.setWindowTitle("Ground Control UI")
         self.setGeometry(100, 100, 600, 400)
 
         layout = QVBoxLayout()
 
-        # Start/Stop Server Button
         self.start_button = QPushButton("Start Receiving Data")
         self.start_button.clicked.connect(self.start_server)
         layout.addWidget(self.start_button)
@@ -131,7 +129,6 @@ class GroundControlUI(QWidget):
         except Exception as e:
             self.logs_text.append(f"❌ Sync failed: {str(e)}")
 
-# Run the application
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = GroundControlUI()
