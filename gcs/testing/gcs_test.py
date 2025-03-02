@@ -25,7 +25,6 @@ TEST_PACKET = {
 class TestGCSSystem(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        """Start main_for_testing.py and server.py before running tests"""
         cls.main_process = Process(target=os.system, args=("python main_for_testing.py",))
         cls.server_process = Process(target=os.system, args=("python server.py",))
 

@@ -30,7 +30,6 @@ def send_packet_to_server(packet):
         print(f"❌ Error connecting to the server: {e}")
 
 def process_received_packet(data):
-    """Processes received packet data."""
     try:
         print(f"\nReceived Packet: {data.hex()}")
 
@@ -59,23 +58,33 @@ def process_received_packet(data):
         print(f"❌ Error decoding packet: {e}")
 
 def receive_and_decode_packets():
-    """Listens for packets sent via the virtual serial port."""
     print("Running in SIMULATION mode (No RF required).")
+
     try:
         with serial.serial_for_url(SIMULATED_SERIAL_PORT, BAUD_RATE, timeout=10) as ser:
             print(f"Listening for packets on {SIMULATED_SERIAL_PORT}...")
 
             while True:
-                data = ser.read(PACKET_SIZE)
-                if len(data) == 0:
-                    print("Waiting for data...")
+                if ser.in_waiting == 0:
+                    print("No data available, waiting...")
+                    time.sleep(1)
                     continue
 
+                print(f"Data Available: {ser.in_waiting} bytes")
+
+                data = ser.read(PACKET_SIZE)
+
+                if len(data) < PACKET_SIZE:
+                    print(f"Incomplete packet received ({len(data)} bytes), skipping...")
+                    continue
+
+                print("✅ Full Packet Received!")
                 process_received_packet(data)
 
     except serial.SerialException as e:
         print(f"❌ Error opening virtual serial port: {e}")
-        print("Ensure the test script is running.")
+        print("Ensure the test script is running and writing to the port.")
+
 
 if __name__ == '__main__':
     receive_and_decode_packets()

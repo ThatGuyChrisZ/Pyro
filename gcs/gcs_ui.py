@@ -59,16 +59,16 @@ class GroundControlUI(QWidget):
         self.load_logs()
 
     def start_server(self):
-        """Start main.py and server.py for receiving data"""
+        """Start main_for_testing.py and server.py for receiving data"""
         self.logs_text.clear()
-        self.logs_text.append("🛠 Starting main.py and server.py...")
+        self.logs_text.append("🛠 Starting main_for_testing.py and server.py...")
 
         if self.server_process is None and self.main_process is None:
             try:
                 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
                 self.main_process = subprocess.Popen(
-                    ["python", os.path.join(BASE_DIR, "main.py")],
+                    ["python", os.path.join(BASE_DIR, "main_for_testing.py")],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True
                 )
 
