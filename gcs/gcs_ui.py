@@ -3,6 +3,8 @@ import subprocess
 import sqlite3
 import os
 import firebase_admin
+import time
+import requests
 from firebase_admin import credentials, db
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLabel
 from database import init_db
@@ -57,39 +59,41 @@ class GroundControlUI(QWidget):
         self.load_logs()
 
     def start_server(self):
+        """Start main.py and server.py for receiving data"""
+        self.logs_text.clear()
+        self.logs_text.append("🛠 Starting main.py and server.py...")
+
         if self.server_process is None and self.main_process is None:
             try:
-                self.logs_text.clear()
-                self.logs_text.append("🛠 Starting main.py and server.py...")
-
                 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
                 self.main_process = subprocess.Popen(
                     ["python", os.path.join(BASE_DIR, "main.py")],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True
                 )
 
                 self.server_process = subprocess.Popen(
                     ["python", os.path.join(BASE_DIR, "server.py")],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True
                 )
 
-                _, server_error = self.server_process.communicate(timeout=5)
+                timeout = 5
+                start_time = time.time()
 
-                if server_error:
-                    self.logs_text.append(f"❌ Server Error:\n{server_error}")
-                    print(f"❌ Server Error:\n{server_error}")
+                while time.time() - start_time < timeout:
+                    try:
+                        response = requests.get("http://localhost:8000/wildfire_list", timeout=2)
+                        if response.status_code == 200:
+                            self.logs_text.append("✅ Server started successfully!")
+                            return
+                    except requests.exceptions.RequestException:
+                        time.sleep(1)
 
-                self.logs_text.append("✅ Data reception started")
-
-            except subprocess.TimeoutExpired:
                 self.logs_text.append("⚠ Server took too long to start.")
+
             except Exception as e:
                 self.logs_text.append(f"❌ Failed to start processes: {e}")
+
 
     def stop_server(self):
         if self.server_process or self.main_process:
