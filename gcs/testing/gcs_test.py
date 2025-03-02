@@ -6,10 +6,13 @@ import struct
 import zlib
 import serial
 import requests
+import socket
 from multiprocessing import Process
 
 DATABASE_PATH = "wildfire_data.db"
 SERVER_URL = "http://localhost:8000"
+DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
+UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 
 # Test Packet Data
 TEST_PACKET_ID = 9999
@@ -25,7 +28,7 @@ TEST_PACKET = {
 class TestGCSSystem(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.main_process = Process(target=os.system, args=("python main_for_testing.py",))
+        cls.main_process = Process(target=os.system, args=("python main.py",))
         cls.server_process = Process(target=os.system, args=("python server.py",))
 
         cls.main_process.start()
@@ -44,16 +47,16 @@ class TestGCSSystem(unittest.TestCase):
             except requests.exceptions.RequestException:
                 time.sleep(1)
 
-        # Wait for main_for_testing.py to start
+        # Wait for main.py to start
         start_time = time.time()
         while time.time() - start_time < timeout:
-            if cls.is_process_running("main_for_testing.py"):
-                print("✅ main_for_testing.py is running.")
+            if cls.is_process_running("main.py"):
+                print("✅ main.py is running.")
                 break
             time.sleep(1)
         
-        if not cls.is_process_running("main_for_testing.py"):
-            raise RuntimeError("❌ main_for_testing.py is NOT running. Ensure GCS UI has started it.")
+        if not cls.is_process_running("main.py"):
+            raise RuntimeError("❌ main.py is NOT running. Ensure GCS UI has started it.")
 
 
     @classmethod
@@ -92,11 +95,14 @@ class TestGCSSystem(unittest.TestCase):
         serialized_packet = payload + struct.pack('<I', checksum)
 
         try:
-            with serial.serial_for_url("loop://", 57600, timeout=5) as ser:
-                print("Sending test packet to virtual serial port...")
-                ser.write(serialized_packet)
-                ser.flush()
-                time.sleep(1)
+            udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            test_packet = serialized_packet
+            udp_socket.sendto(test_packet, ("127.0.0.1", UDP_PORT))
+            print(f"✅ Sent test packet to UDP port {UDP_PORT}")
+            time.sleep(1)
+        except socket.error as e:
+            print(f"❌ Error sending test packet to UDP: {e}")
+
 
         except serial.SerialException as e:
             self.fail(f"❌ Error sending test packet to virtual serial: {e}")

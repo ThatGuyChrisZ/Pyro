@@ -7,6 +7,7 @@ import math
 import firebase_admin
 from firebase_admin import credentials, db
 import time
+from threading import Thread
 
 # Firebase Config
 FIREBASE_CREDENTIALS_PATH = "firebase_credentials.json"
@@ -131,8 +132,6 @@ def sync_to_firebase():
             print(f"Failed to sync batch: {e}")
 
     conn.close()
-
-from threading import Thread
 
 def process_packet(packet, name, status="active"):
     """Process a new wildfire packet, store it in SQLite, and attempt Firebase sync."""

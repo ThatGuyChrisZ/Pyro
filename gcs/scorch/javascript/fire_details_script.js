@@ -2,10 +2,10 @@ import { displayWeather } from "./weather_script.js";
 
 const fireName = new URLSearchParams(window.location.search).get("name");
 let currentGradient = {
-    0.6: "blue",
-    0.7: "lime",
-    0.8: "yellow",
-    0.9: "orange",
+    0.0: "blue",
+    0.3: "lime",
+    0.5: "yellow",
+    0.8: "orange",
     1: "red",
 };
 

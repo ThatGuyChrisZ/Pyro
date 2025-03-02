@@ -57,18 +57,18 @@ class GroundControlUI(QWidget):
 
         self.setLayout(layout)
         self.load_logs()
+        self.logs_text.clear()
 
     def start_server(self):
-        """Start main_for_testing.py and server.py for receiving data"""
-        self.logs_text.clear()
-        self.logs_text.append("🛠 Starting main_for_testing.py and server.py...")
+        """Start main.py and server.py for receiving data"""
+        self.logs_text.append("🛠 Starting main.py and server.py...")
 
         if self.server_process is None and self.main_process is None:
             try:
                 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
                 self.main_process = subprocess.Popen(
-                    ["python", os.path.join(BASE_DIR, "main_for_testing.py")],
+                    ["python", os.path.join(BASE_DIR, "main.py")],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True
                 )
 
@@ -86,6 +86,7 @@ class GroundControlUI(QWidget):
                         if response.status_code == 200:
                             self.logs_text.append("✅ Server started successfully!")
                             return
+
                     except requests.exceptions.RequestException:
                         time.sleep(1)
 
@@ -141,24 +142,44 @@ class GroundControlUI(QWidget):
 
             if not unsynced_data:
                 self.logs_text.append("✅ No new data to sync.")
+                return
             else:
                 ref = db.reference("wildfires")
+
+                numSynced = 0
+                batch_data = {}
+                ids_to_update = []
 
                 for row in unsynced_data:
                     fire_data = {
                         "name": row[1],
+                        "pac_id": row[2],
                         "latitude": row[3],
                         "longitude": row[4],
+                        "alt": row[5],
                         "high_temp": row[6],
                         "low_temp": row[7],
-                        "status": "active",
-                        "sync_status": "pending"
+                        "date_received": row[8],
+                        "time_received": row[9],
+                        "status": row[10],
                     }
-                    ref.push(fire_data)
+                    batch_data[f"wildfires/{row[0]}"] = fire_data
+                    ids_to_update.append(row[0])
                     cursor.execute("UPDATE wildfires SET sync_status = 'synced' WHERE id = ?", (row[0],))
+                    numSynced += 1
+
+            if batch_data:
+                try:
+                    ref.update(batch_data) 
+                    self.logs_text.append(f"✅ {len(batch_data)} Packets synced successfully to Firebase!")
+
+                    cursor.executemany("UPDATE wildfires SET sync_status = 'synced' WHERE id = ?", [(id,) for id in ids_to_update])
+                    conn.commit()
+
+                except Exception as e:
+                    print(f"❌ Failed to sync batch: {e}")
 
                 conn.commit()
-                self.logs_text.append("✅ Data synced successfully!")
 
         except Exception as e:
             self.logs_text.append(f"❌ Sync failed: {str(e)}")

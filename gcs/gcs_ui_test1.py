@@ -4,8 +4,9 @@ import requests
 from multiprocessing import Process
 
 DATABASE_PATH = "wildfire_data.db"
-SERVER_URL = "http://localhost:8000"
+SERVER_URL = "http://localhost:8000"\
 
+# Tests whether GCS_UI starts both main and server processes
 class TestGCSUI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -22,19 +23,21 @@ class TestGCSUI(unittest.TestCase):
                 if response.status_code == 200:
                     print("✅ server.py is running and responsive.")
                     break
+                else:
+                    raise RuntimeError("❌ server.py is NOT running. Ensure GCS UI has started it.")
             except requests.exceptions.RequestException:
                 time.sleep(1)
 
-        # Wait for main_for_testing.py to start
+        # Wait for main.py to start
         start_time = time.time()
         while time.time() - start_time < timeout:
-            if cls.is_process_running("main_for_testing.py"):
-                print("✅ main_for_testing.py is running.")
+            if cls.is_process_running("main.py"):
+                print("✅ main.py is running.")
                 break
             time.sleep(1)
         
-        if not cls.is_process_running("main_for_testing.py"):
-            raise RuntimeError("❌ main_for_testing.py is NOT running. Ensure GCS UI has started it.")
+        if not cls.is_process_running("main.py"):
+            raise RuntimeError("❌ main.py is NOT running. Ensure GCS UI has started it.")
 
     @staticmethod
     def is_process_running(target_script):
