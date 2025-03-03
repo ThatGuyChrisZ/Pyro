@@ -4,16 +4,36 @@ from datetime import datetime
 import pandas as pd
 import requests
 import math
+import firebase_admin
+from firebase_admin import credentials, db
+import time
+from threading import Thread
+
+# Firebase Config
+FIREBASE_CREDENTIALS_PATH = "firebase_credentials.json"
+FIREBASE_DB_URL = "https://pyro-fire-tracking-default-rtdb.firebaseio.com/"
+
+# Initialize Firebase
+if not firebase_admin._apps:
+    cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+    firebase_admin.initialize_app(cred, {"databaseURL": FIREBASE_DB_URL})
+
+firebase_ref = db.reference("wildfires")
 
 def init_db():
+    """Initialize the local SQLite database with WAL mode and new sync_status column."""
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
+    
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    
+    # sync_status refers to whether data is synced to Firebase
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS wildfires (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            pac_id INTEGER NOT NULL,
+            pac_id INTEGER NOT NULL DEFAULT -1,
             latitude REAL,
             longitude REAL,
             alt REAL,
@@ -21,65 +41,140 @@ def init_db():
             low_temp REAL,
             date_received STRING,
             time_received STRING,
-            status REAL
+            status TEXT DEFAULT 'active',
+            sync_status TEXT DEFAULT 'pending'  
         )
         """
     )
+    
     init_wildfire_status_db()
     conn.commit()
     conn.close()
 
+
 def insert_wildfire_data(name: str, latitude: float, longitude: float, high_temp: float, low_temp: float, 
                          date_received: str, time_received: str, status: str = "active"):
+    """Insert wildfire data into SQLite and mark it as pending for Firebase sync."""
     conn = sqlite3.connect('wildfire_data.db')
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO wildfires (
-            name, latitude, longitude, high_temp, low_temp, date_received, time_received, status
+            name, latitude, longitude, high_temp, low_temp, date_received, time_received, status, sync_status
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
     ''', (name, latitude, longitude, high_temp, low_temp, date_received, time_received, status))
     conn.commit()
     conn.close()
 
-def process_packet(packet, name, status="active"):
+def is_data_in_firebase(name, date_received, time_received):
+    """Check if wildfire data exists in Firebase"""
     try:
-        pac_id = packet.get("pac_id")
+        existing_data = firebase_ref.child("wildfires").get()
+
+        if isinstance(existing_data, dict):
+            for key, fire in existing_data.items():
+                if isinstance(fire, dict) and fire.get("name") == name and fire.get("date_received") == date_received and fire.get("time_received") == time_received:
+                    return True
+
+        return False
+
+    except Exception as e:
+        print(f"⚠ Firebase query failed: {e}")
+        return False
+    
+
+def sync_to_firebase():
+    """Sync all pending SQLite data to Firebase using batch writes."""
+    conn = sqlite3.connect("wildfire_data.db")
+    cursor = conn.cursor()
+
+    # Fetch all unsynced data
+    cursor.execute("SELECT * FROM wildfires WHERE sync_status = 'pending'")
+    unsynced_data = cursor.fetchall()
+
+    if not unsynced_data:
+        print("No new data to sync.")
+        return
+
+    print(f"Found {len(unsynced_data)} pending records to sync...")
+
+    batch_data = {}
+    ids_to_update = []
+
+    for row in unsynced_data:
+        fire_data = {
+            "name": row[1],
+            "pac_id": row[2],
+            "latitude": row[3],
+            "longitude": row[4],
+            "alt": row[5],
+            "high_temp": row[6],
+            "low_temp": row[7],
+            "date_received": row[8],
+            "time_received": row[9],
+            "status": row[10],
+        }
+
+        # Add to batch only if it doesn't already exist in Firebase
+        if not is_data_in_firebase(fire_data["name"], fire_data["date_received"], fire_data["time_received"]):
+            batch_data[f"wildfires/{row[0]}"] = fire_data 
+            ids_to_update.append(row[0])
+
+    if batch_data:
+        try:
+            firebase_ref.update(batch_data) 
+            print(f"Successfully synced {len(batch_data)} records to Firebase.")
+
+            cursor.executemany("UPDATE wildfires SET sync_status = 'synced' WHERE id = ?", [(id,) for id in ids_to_update])
+            conn.commit()
+
+        except Exception as e:
+            print(f"Failed to sync batch: {e}")
+
+    conn.close()
+
+def process_packet(packet, name, status="active"):
+    """Process a new wildfire packet, store it in SQLite, and attempt Firebase sync."""
+    try:
+        pac_id = packet.get("pac_id", -1)
         gps_data = packet.get("gps_data", [0.0, 0.0])
         latitude, longitude = gps_data[0], gps_data[1]
         alt = packet.get("alt", 0.0)
         high_temp = packet.get("high_temp", 0.0)
         low_temp = packet.get("low_temp", 0.0)
 
-        # Get current date and time
         now = datetime.now()
         date_received = now.strftime("%Y-%m-%d")
         time_received = now.strftime("%H:%M:%S")
 
-        conn = sqlite3.connect("wildfire_data.db")
+        conn = sqlite3.connect("wildfire_data.db", timeout=5)
         cursor = conn.cursor()
 
         cursor.execute(
             """
             INSERT INTO wildfires (
                 name, pac_id, latitude, longitude, alt, high_temp, low_temp, 
-                status, date_received, time_received
+                status, date_received, time_received, sync_status
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
             """,
             (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status, date_received, time_received)
         )
 
         conn.commit()
+        conn.close()
 
         update_fire_status(name, latitude, longitude, high_temp, low_temp, alt)
 
-        conn.close()
+        # Run Firebase sync in parallel thread
+        sync_thread = Thread(target=sync_to_firebase)
+        sync_thread.start()
+
     except Exception as e:
         print(f"Error processing packet: {e}")
 
-
 def fetch_wildfire_data(name: Optional[str] = None, date: Optional[str] = None, time: Optional[str] = None) -> List[Tuple]:
+    """Fetch wildfire data from SQLite."""
     conn = sqlite3.connect('wildfire_data.db')
     cursor = conn.cursor()
     query = '''

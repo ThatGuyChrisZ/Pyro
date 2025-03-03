@@ -10,8 +10,8 @@ def generate_test_data(file_path, name, center_lat, center_lon, num_points=100):
         lat = center_lat + random.uniform(-0.01, 0.01)
         lon = center_lon + random.uniform(-0.01, 0.01)
         alt = random.uniform(500, 1500)
-        high_temp = random.uniform(400, 500)
-        low_temp = random.uniform(300, 399)
+        high_temp = random.uniform(300, 650)
+        low_temp = random.uniform(100, 399)
 
         packet = {
             "name": name,
@@ -34,5 +34,5 @@ generate_test_data(
     name='Davis Fire',
     center_lat=39.305278,
     center_lon=-119.8325,
-    num_points=500
+    num_points=1000
 )
