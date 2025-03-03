@@ -7,6 +7,7 @@ import pandas as pd
 from pymavlink import mavutil
 import time
 import math
+import threading
 
 
 from database import (
@@ -54,7 +55,6 @@ def recursive_listen(QGroundControl):
     recursive_listen(QGroundControl)
 
 def avionics_integration(output):
-    print("this is getting called")
     QGroundControl = mavutil.mavlink_connection('udpin:localhost:14445')
     enabled = 1
     while True:
@@ -79,10 +79,11 @@ def avionics_integration(output):
                 "altitude": Altitude.altitude_amsl,
                 "latitude": GPS.lat,
                 "longitude": GPS.lon,
-                "time_collected": rounded_time
+                "time_stamp": rounded_time
             }
             
             print(export)
+            update_mission_data(export)
 
             #Re enable loop
             output.put(export)
@@ -106,9 +107,6 @@ def import_packets_from_file(file_path):
         print(f"File not found: {file_path}")
     except Exception as e:
         print(f"Error reading file: {e}")
-
-init_db()
-import_packets_from_file('test_packets.txt')
 
 class NavigationHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -204,36 +202,14 @@ class NavigationHandler(SimpleHTTPRequestHandler):
                     "alt": alt,
                     "high_temp": high_temp,
                     "low_temp": low_temp,
-                    "time_collected": time_stamp
+                    "time_stamp": time_stamp
                 }
 
                 process_packet(packet, name, "pending")
-                sync_to_firebase()
 
                 self._send_json_response({"message": "Packet added and sync initiated."})
             except Exception as e:
                 self._send_error_response(f"Failed to process packet: {str(e)}")
-
-        elif parsed_path.path == "/add_mission_data":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            try:
-                packet_data = json.loads(post_data)
-                mission_time = packet_data.get("time", "00:00:00")
-                gps_data = packet_data.get("gps_data", [0.0, 0.0])
-                alt = packet_data.get("alt", 0.0)
-                heading = packet_data.get("heading", 0.0)
-                speed = packet_data.get("speed", 0.0)
-
-                update_mission_data(mission_time, gps_data, alt, heading, speed)
-                sync_to_firebase()
-
-                self._send_json_response({"message": "Mission data updated and sync initiated."})
-            except Exception as e:
-                self._send_error_response(f"Failed to update mission data: {str(e)}")
-
-        else:
-            self.send_error(404, "Endpoint not found")
 
     def _send_json_response(self, data):
         """Send a JSON response."""
@@ -249,21 +225,26 @@ class NavigationHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps({"error": error_message}).encode())
 
+def delayed_sync():
+    """Delay Firebase sync to ensure all data is processed first."""
+    time.sleep(2)  # ✅ Wait for mission data updates
+    sync_to_firebase()
 
-# Run the server
+# Run Server
 if __name__ == "__main__":
+    # Initialization
+    init_db()
+    import_packets_from_file('test_packets.txt')
 
-    #Avionics Sub routine start
+    # Start Avionics Process
     q1 = mp.Queue()
     p1 = mp.Process(target=avionics_integration, args=(q1,))
     p1.start()
     
+    # Start Server
     host_name = "localhost"
     port_number = 8000
     server = HTTPServer((host_name, port_number), NavigationHandler)
     print(f"Server running at http://{host_name}:{port_number}/pyro")
 
     server.serve_forever()
-
-    # Ensure pending data is synced when the server starts
-    sync_to_firebase()

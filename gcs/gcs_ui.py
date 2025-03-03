@@ -151,18 +151,23 @@ class GroundControlUI(QWidget):
                 ids_to_update = []
 
                 for row in unsynced_data:
-                    fire_data = {
-                        "name": row[1],
-                        "pac_id": row[2],
-                        "latitude": row[3],
-                        "longitude": row[4],
-                        "alt": row[5],
-                        "high_temp": row[6],
-                        "low_temp": row[7],
-                        "date_received": row[8],
-                        "time_received": row[9],
-                        "status": row[10],
-                    }
+                    for row in unsynced_data:
+                        fire_data = {
+                            "name": row[1],
+                            "pac_id": row[2],
+                            "latitude": row[3],
+                            "longitude": row[4],
+                            "alt": row[5],
+                            "high_temp": row[6],
+                            "low_temp": row[7],
+                            "date_received": row[8],
+                            "time_received": row[9],
+                            "status": row[10],
+                            "sync_status": row[11],
+                            "time_stamp": row[12],
+                            "heading": row[13],
+                            "speed": row[14]
+                        }
                     batch_data[f"wildfires/{row[0]}"] = fire_data
                     ids_to_update.append(row[0])
                     cursor.execute("UPDATE wildfires SET sync_status = 'synced' WHERE id = ?", (row[0],))
