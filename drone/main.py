@@ -35,7 +35,7 @@ pac_id_to_create = 1 # Global variable for creating the next packet id (don't ki
 UNSIGNED_INT_MAX = 2147483647
 
 # rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-ACK_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
+ACK_PACKET_SIZE = 11 # String (of three letters) [3] + integer size (pac_id) [4] + checksum [4]
 GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
 gps_sim_file = open('sim_gps.txt', 'r')
 UDP_PORT = 5004
@@ -394,9 +394,10 @@ def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port):
     # UDP socket debug mode (local)
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        udp_socket.bind(("0.0.0.0", UDP_PORT))
+        udp_socket.bind(("127.0.0.1", UDP_PORT))
         print(f"RD: Listening for packets on UDP Port {UDP_PORT}...")
         data = None
+        addr = None
 
     # Mode 0|1: Read from RF serial
     else:
@@ -413,7 +414,9 @@ def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port):
         try:
             # Receive the data off the bus
             if prog_mode == 2:
+                print("RD: Reading off the UDP socket . . .")
                 data, addr = udp_socket.recvfrom(ACK_PACKET_SIZE)
+                
                 print(f"RD: Received packet from {addr}")
             # Read the serialized data from the RF module
             else:
@@ -424,21 +427,27 @@ def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port):
             if prog_mode != 0:
                 print(f"RD: PACKET LENGTH: {len(data)}")
                 print(f'RD: PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
-                if len(data) < ACK_PACKET_SIZE:
+            
+            if len(data) < ACK_PACKET_SIZE:
+                if prog_mode != 0:
                     print("RD: Incomplete packet received, skipping...")
-                    continue
+                continue
 
-            # Unpack the payload
-            payload = data
-            # received_checksum = struct.unpack('<I', data[-4:])[0] # and here we check that sum
-            # computed_checksum = zlib.crc32(payload)
 
-            # if computed_checksum != received_checksum:
-            #     print(f"RD: Checksum mismatch! Packet corrupted. \\ COMPUTED:{computed_checksum}, RECEIVED: {received_checksum}")
-            #     continue
+            # Unpack the payload and checksum
+            ack_payload = data[:-4]  # setting to all but the sum . . . 
+            received_checksum = struct.unpack('<I', data[-4:])[0] # and here we check that sum
+
+            computed_checksum = zlib.crc32(ack_payload)
+
+            if computed_checksum != received_checksum:
+                print(f"RD: Checksum mismatch! Packet corrupted. \\ COMPUTED:{computed_checksum}, RECEIVED: {received_checksum}")
+                continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
-            type, pac_id = struct.unpack('<3sI', payload)
+            type, pac_id = struct.unpack('<3sI', ack_payload)
+
+            my_packet_info_dict.pop(pac_id)
 
         except struct.error as e:
             print(f"RD: Error decoding packet: {e}")
