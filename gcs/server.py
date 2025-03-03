@@ -53,6 +53,7 @@ def recursive_listen(QGroundControl):
     recursive_listen(QGroundControl)
 
 def avionics_integration(output):
+    QGroundControl = mavutil.mavlink_connection('udpin:localhost:14445')
     enabled = 1
     while TRUE:
         
