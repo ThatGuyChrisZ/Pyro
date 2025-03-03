@@ -136,6 +136,25 @@ class NavigationHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_error_response(f"Failed to process packet: {str(e)}")
 
+        elif parsed_path.path == "/add_mission_data":
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+            try:
+                packet_data = json.loads(post_data)
+                mission_time = packet_data.get("time", "00:00:00")
+                gps_data = packet_data.get("gps_data", [0.0, 0.0])
+                alt = packet_data.get("alt", 0.0)
+                heading = packet_data.get("heading", 0.0)
+                speed = packet_data.get("speed", 0.0)
+
+                update_mission_data(mission_time, gps_data, alt, heading, speed)
+                sync_to_firebase()
+
+                self._send_json_response({"message": "Mission data updated and sync initiated."})
+            except Exception as e:
+                self._send_error_response(f"Failed to update mission data: {str(e)}")
+
+
 
         else:
             self.send_error(404, "Endpoint not found")

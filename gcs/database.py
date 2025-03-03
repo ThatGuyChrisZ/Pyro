@@ -476,3 +476,29 @@ def get_nearest_city(latitude: float, longitude: float) -> str:
         print(f"Error getting nearest city: {e}")
         return "Unknown Location"
     
+def update_mission_data(mission_time, gps_data, alt, heading, speed):
+    # Ensure the table has the needed columns.
+    
+    conn = sqlite3.connect("wildfire_data.db")
+    cursor = conn.cursor()
+    try:
+        query = """
+            UPDATE wildfires
+            SET latitude = ?,
+                longitude = ?,
+                alt = ?,
+                heading = ?,
+                speed = ?,
+                sync_status = 'pending'
+            WHERE time_received = ?
+        """
+        cursor.execute(query, (gps_data[0], gps_data[1], alt, heading, speed, mission_time))
+        conn.commit()
+        if cursor.rowcount == 0:
+            print("No wildfire record found matching the given time.")
+        else:
+            print("Wildfire record updated with mission data.")
+    except Exception as e:
+        print(f"Error updating mission data: {e}")
+    finally:
+        conn.close()
