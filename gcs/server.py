@@ -8,7 +8,8 @@ from database import (
     process_packet,
     fetch_fire_list,
     fetch_heatmap_data,
-    fetch_all_heatmap_data
+    fetch_all_heatmap_data,
+    sync_to_firebase  # Import Firebase syncing function
 )
 
 # used for test data, reads packets as lines in txt file
@@ -32,7 +33,6 @@ def import_packets_from_file(file_path):
 
 init_db()
 import_packets_from_file('test_packets.txt')
-
 
 class NavigationHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -81,7 +81,6 @@ class NavigationHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_error_response(str(e))
 
-
         elif parsed_path.path == "/download_csv":
             try:
                 conn = sqlite3.connect("wildfire_data.db")
@@ -99,6 +98,11 @@ class NavigationHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_error_response(str(e))
 
+        elif parsed_path.path == "/sync_firebase":
+            """Manually trigger Firebase sync for any pending data."""
+            sync_to_firebase()
+            self._send_json_response({"message": "Firebase sync initiated."})
+
         else:
             super().do_GET()
 
@@ -111,7 +115,7 @@ class NavigationHandler(SimpleHTTPRequestHandler):
             try:
                 packet_data = json.loads(post_data)
                 name = "New Data Fire"
-                pac_id = packet_data.get("pac_id")
+                pac_id = packet_data.get("pac_id", -1)  # Default to -1 if missing
                 gps_data = packet_data.get("gps_data", [0.0, 0.0])
                 alt = packet_data.get("alt", 0.0)
                 high_temp = packet_data.get("high_temp", 0.0)
@@ -125,10 +129,13 @@ class NavigationHandler(SimpleHTTPRequestHandler):
                     "low_temp": low_temp,
                 }
 
-                process_packet(packet, name, "active")
-                self._send_json_response({"message": "Packet added successfully"})
+                process_packet(packet, name, "pending")
+                sync_to_firebase()
+
+                self._send_json_response({"message": "Packet added and sync initiated."})
             except Exception as e:
                 self._send_error_response(f"Failed to process packet: {str(e)}")
+
 
         else:
             self.send_error(404, "Endpoint not found")
@@ -153,5 +160,9 @@ if __name__ == "__main__":
     host_name = "localhost"
     port_number = 8000
     server = HTTPServer((host_name, port_number), NavigationHandler)
-    print(f"Server running at http://{host_name}:{port_number}/scorch")
+    print(f"Server running at http://{host_name}:{port_number}/pyro")
+
     server.serve_forever()
+
+    # Ensure pending data is synced when the server starts
+    sync_to_firebase()
