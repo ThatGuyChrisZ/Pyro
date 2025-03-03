@@ -10,9 +10,9 @@ import serial
 import socket # For UDP socket transmission in MODE 2
 import requests
 import argparse
-from packet_class._v2.packet import Packet
+from packet_class._v4.packet import Packet
 
-PACKET_SIZE = 24  # ADJUST?
+PACKET_SIZE = 32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
 DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
@@ -36,6 +36,7 @@ def send_packet_to_server(packet):
             "alt": packet.alt,
             "high_temp": packet.high_temp,
             "low_temp": packet.low_temp,
+            "time_stamp": packet.time_stamp
         }
 
         response = requests.post(server_url, json=packet_data)
@@ -102,14 +103,15 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
                 continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
-            pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', payload)
+            pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<IffIhhq', payload)
 
             packet = Packet(
                 pac_id=pac_id,
                 gps_data=[lat, lon],
                 alt=alt,
                 high_temp=high_temp,
-                low_temp=low_temp
+                low_temp=low_temp,
+                time_stamp=time_stamp
             )
 
             # ---------------- #
@@ -144,7 +146,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
-    prog_mode = 2 # Default mode is normal (not debugging)
+    prog_mode = 0 # Default mode is normal (not debugging)
     rf_serial = None
     usb_port_trans = None
 
