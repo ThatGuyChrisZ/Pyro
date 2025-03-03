@@ -42,10 +42,10 @@ def init_db():
             date_received STRING,
             time_received STRING,
             status TEXT DEFAULT 'active',
-            sync_status TEXT DEFAULT 'pending'  
+            sync_status TEXT DEFAULT 'pending', 
             time_collected REAL,
             heading REAL,
-            speed REAL,
+            speed REAL
         )
         """
     )
@@ -134,6 +134,8 @@ def process_packet(packet, name, status="active"):
         high_temp = packet.get("high_temp", 0.0)
         low_temp = packet.get("low_temp", 0.0)
         time_collected = packet.get("time_collected", 0.0)
+        heading = 0
+        speed = 0
 
         now = datetime.now()
         date_received = now.strftime("%Y-%m-%d")
@@ -146,11 +148,12 @@ def process_packet(packet, name, status="active"):
             """
             INSERT INTO wildfires (
                 name, pac_id, latitude, longitude, alt, high_temp, low_temp, 
-                status, date_received, time_received, sync_status
+                status, date_received, time_received, sync_status, time_collected,
+                heading, speed
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status, date_received, time_received)
+            (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status, date_received, time_received, "pending", time_collected, heading, speed)
         )
 
         conn.commit()
@@ -392,7 +395,7 @@ def update_mission_data(mission_time, gps_data, alt, heading, speed):
                 heading = ?,
                 speed = ?,
                 sync_status = 'pending'
-            WHERE time_received = ?
+            WHERE time_collected = ?
         """
         cursor.execute(query, (gps_data[0], gps_data[1], alt, heading, speed, mission_time))
         conn.commit()

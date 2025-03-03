@@ -19,6 +19,7 @@ from database import (
     update_mission_data
 )
 
+# Not being used, but referenced
 def recursive_listen(QGroundControl):
     QGroundControl.wait_heartbeat()
     Attitude = QGroundControl.recv_match(type='ATTITUDE', blocking=True)
@@ -38,7 +39,7 @@ def recursive_listen(QGroundControl):
         print("Pitch: ", Attitude.pitch)
         print("Roll:", Attitude.roll)
         print("Yaw:", Attitude.yaw)
-        print("Altitudee",Altitude.altitude_amsl)
+        print("Altitude",Altitude.altitude_amsl)
         print("Heading: ",Heading.heading)
         print("Ground Speed: ",Heading.groundspeed)
         print("GPS lat: ", GPS.lat)
@@ -53,34 +54,39 @@ def recursive_listen(QGroundControl):
     recursive_listen(QGroundControl)
 
 def avionics_integration(output):
+    print("this is getting called")
     QGroundControl = mavutil.mavlink_connection('udpin:localhost:14445')
     enabled = 1
-    while TRUE:
+    while True:
         
-        if enabled = 1:
+        if enabled == 1:
             enabled = 0
             QGroundControl.wait_heartbeat()
             Attitude = QGroundControl.recv_match(type='ATTITUDE', blocking=True)
             Altitude = QGroundControl.recv_match(type='ALTITUDE', blocking=True)
             Heading = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
             GPS = QGroundControl.recv_match(type='GPS_RAW_INT', blocking=True)
-            Ground_speed = 
-            #GPS_RAW_INT
+            Ground_speed = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
+            #GPS_RAW_INTs
             mailbox = QGroundControl.messages.keys()
+            new_time = time.time()
+            local_time = time.localtime(new_time)
+            rounded_time = round(float(new_time),1)
+
+            export = {
+                "heading": Heading.heading,
+                "speed": Heading.groundspeed,
+                "altitude": Altitude.altitude_amsl,
+                "latitude": GPS.lat,
+                "longitude": GPS.lon,
+                "time_collected": rounded_time
+            }
             
-            export =  '{ "Attitude":Attitude, "Heading":Heading.heading,"groundspeed": Heading.groundspeed, "Altitude":Altitude, "lat": GPS.lat, "lon": GPS.lon,"sat_count":,GPS.satellites_visible}'
-        
-        
-        
+            print(export)
+
             #Re enable loop
             output.put(export)
             enabled = 1
-            
-        
- 
-
-
-
 
 # used for test data, reads packets as lines in txt file
 def import_packets_from_file(file_path):
@@ -226,8 +232,6 @@ class NavigationHandler(SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_error_response(f"Failed to update mission data: {str(e)}")
 
-
-
         else:
             self.send_error(404, "Endpoint not found")
 
@@ -251,10 +255,8 @@ if __name__ == "__main__":
 
     #Avionics Sub routine start
     q1 = mp.Queue()
-    p1 = mp.Process(target=avionics_integration, args=(q1))
-    
-    ##
-    
+    p1 = mp.Process(target=avionics_integration, args=(q1,))
+    p1.start()
     
     host_name = "localhost"
     port_number = 8000

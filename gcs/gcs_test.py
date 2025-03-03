@@ -22,6 +22,7 @@ TEST_PACKET = {
     "alt": 1500,
     "high_temp": 500,
     "low_temp": 300,
+    "time_stamp": 100000
 }
 
 
