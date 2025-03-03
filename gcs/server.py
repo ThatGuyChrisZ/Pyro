@@ -63,10 +63,11 @@ def avionics_integration(output):
             Altitude = QGroundControl.recv_match(type='ALTITUDE', blocking=True)
             Heading = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
             GPS = QGroundControl.recv_match(type='GPS_RAW_INT', blocking=True)
+            Ground_speed = 
             #GPS_RAW_INT
             mailbox = QGroundControl.messages.keys()
             
-            export =  '{ "Attitude":Attitude, "Heading":heading, "Altitude":Altitude, "lat": GPS.lat, "lon": GPS.lon,"sat_count":,GPS.satellites_visible}'
+            export =  '{ "Attitude":Attitude, "Heading":Heading.heading,"groundspeed": Heading.groundspeed, "Altitude":Altitude, "lat": GPS.lat, "lon": GPS.lon,"sat_count":,GPS.satellites_visible}'
         
         
         
