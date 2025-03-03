@@ -42,10 +42,10 @@ def init_db():
             date_received STRING,
             time_received STRING,
             status TEXT DEFAULT 'active',
-            sync_status TEXT DEFAULT 'pending'  
-            time_collected REAL,
+            sync_status TEXT DEFAULT 'pending', 
+            time_stamp REAL,
             heading REAL,
-            speed REAL,
+            speed REAL
         )
         """
     )
@@ -101,7 +101,7 @@ def sync_to_firebase():
             "time_received": row[9],
             "status": row[10],
             "sync_status": row[11],
-            "time_collected": row[12],
+            "time_stamp": row[12],
             "heading": row[13],
             "speed": row[14]
         }
@@ -125,7 +125,6 @@ def sync_to_firebase():
     conn.close()
 
 def process_packet(packet, name, status="active"):
-    """Process a new wildfire packet, store it in SQLite, and attempt Firebase sync."""
     try:
         pac_id = packet.get("pac_id", -1)
         gps_data = packet.get("gps_data", [0.0, 0.0])
@@ -133,7 +132,9 @@ def process_packet(packet, name, status="active"):
         alt = packet.get("alt", 0.0)
         high_temp = packet.get("high_temp", 0.0)
         low_temp = packet.get("low_temp", 0.0)
-        time_collected = packet.get("time_collected", 0.0)
+        time_stamp = packet.get("time_stamp", 0.0)
+        heading = 0
+        speed = 0
 
         now = datetime.now()
         date_received = now.strftime("%Y-%m-%d")
@@ -142,15 +143,28 @@ def process_packet(packet, name, status="active"):
         conn = sqlite3.connect("wildfire_data.db", timeout=5)
         cursor = conn.cursor()
 
+        # Check for duplicate packet based on pac_id and time_stamp
+        cursor.execute(
+            "SELECT COUNT(*) FROM wildfires WHERE pac_id = ? AND time_stamp = ?",
+            (pac_id, time_stamp)
+        )
+        duplicate_count = cursor.fetchone()[0]
+        if duplicate_count > 0:
+            print(f"Duplicate packet (pac_id: {pac_id}, time_stamp: {time_stamp}) found. Skipping insertion.")
+            conn.close()
+            return
+
         cursor.execute(
             """
             INSERT INTO wildfires (
                 name, pac_id, latitude, longitude, alt, high_temp, low_temp, 
-                status, date_received, time_received, sync_status
+                status, date_received, time_received, sync_status, time_stamp,
+                heading, speed
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status, date_received, time_received)
+            (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status,
+             date_received, time_received, "pending", time_stamp, heading, speed)
         )
 
         conn.commit()
@@ -158,12 +172,13 @@ def process_packet(packet, name, status="active"):
 
         update_fire_status(name, latitude, longitude, high_temp, low_temp, alt)
 
-        # Run Firebase sync in parallel thread
-        sync_thread = Thread(target=sync_to_firebase)
-        sync_thread.start()
+        # Run Firebase sync in a parallel thread
+        #sync_thread = Thread(target=sync_to_firebase)
+        #sync_thread.start()
 
     except Exception as e:
         print(f"Error processing packet: {e}")
+
 
 def fetch_fire_list(status: str = "active") -> List[dict]:
     try:
@@ -378,29 +393,49 @@ def get_nearest_city(latitude: float, longitude: float) -> str:
         print(f"Error getting nearest city: {e}")
         return "Unknown Location"
     
-def update_mission_data(mission_time, gps_data, alt, heading, speed):
-    # Ensure the table has the needed columns.
-    
+def update_mission_data(export):
+    mission_time = export.get("time_stamp")
+    gps_lat = export.get("latitude", 0.0)
+    gps_lon = export.get("longitude", 0.0)
+    alt = export.get("altitude", 0.0)
+    heading = export.get("heading", 0.0)
+    speed = export.get("speed", 0.0)
+
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
     try:
-        query = """
-            UPDATE wildfires
-            SET latitude = ?,
-                longitude = ?,
-                alt = ?,
-                heading = ?,
-                speed = ?,
-                sync_status = 'pending'
-            WHERE time_received = ?
+        # Find the record with the closest time_stamp
+        select_query = """
+            SELECT id, time_stamp FROM wildfires
+            ORDER BY ABS(time_stamp - ?) ASC LIMIT 1
         """
-        cursor.execute(query, (gps_data[0], gps_data[1], alt, heading, speed, mission_time))
-        conn.commit()
-        if cursor.rowcount == 0:
-            print("No wildfire record found matching the given time.")
+        cursor.execute(select_query, (mission_time,))
+        result = cursor.fetchone()
+        
+        if result is None:
+            print("No wildfire record found to update mission data.")
         else:
-            print("Wildfire record updated with mission data.")
+            record_id, record_time = result
+            update_query = """
+                UPDATE wildfires
+                SET latitude = ?,
+                    longitude = ?,
+                    alt = ?,
+                    heading = ?,
+                    speed = ?,
+                    sync_status = 'pending'
+                WHERE id = ?
+            """
+            cursor.execute(update_query, (gps_lat, gps_lon, alt, heading, speed, record_id))
+            conn.commit()
+            if cursor.rowcount == 0:
+                print("❌ No wildfire record updated.")
+            else:
+                print(f"✅ Wildfire record updated with mission data (record id: {record_id}).")            
+                sync_to_firebase
     except Exception as e:
         print(f"Error updating mission data: {e}")
     finally:
         conn.close()
+
+    

@@ -2,7 +2,14 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 import json
 import sqlite3
+import multiprocessing as mp
 import pandas as pd
+from pymavlink import mavutil
+import time
+import math
+import threading
+
+
 from database import (
     init_db,
     process_packet,
@@ -12,6 +19,75 @@ from database import (
     sync_to_firebase,
     update_mission_data
 )
+
+# Not being used, but referenced
+def recursive_listen(QGroundControl):
+    QGroundControl.wait_heartbeat()
+    Attitude = QGroundControl.recv_match(type='ATTITUDE', blocking=True)
+    Altitude = QGroundControl.recv_match(type='ALTITUDE', blocking=True)
+    Heading = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
+    GPS = QGroundControl.recv_match(type='GPS_RAW_INT', blocking=True)
+    #GPS_RAW_INT
+    mailbox = QGroundControl.messages.keys()
+    enable = 1
+    if enable == 2:
+        for mail in mailbox:
+            print("____________________________________")
+            print(mail)
+    
+    if enable == 1:
+        print("_______________________________")
+        print("Pitch: ", Attitude.pitch)
+        print("Roll:", Attitude.roll)
+        print("Yaw:", Attitude.yaw)
+        print("Altitude",Altitude.altitude_amsl)
+        print("Heading: ",Heading.heading)
+        print("Ground Speed: ",Heading.groundspeed)
+        print("GPS lat: ", GPS.lat)
+        print("GPS lon: ", GPS.lon)
+        print("GPS Satelites: ", GPS.satellites_visible)
+        new_time = time.time()
+        local_time = time.localtime(new_time)
+        rounded_time = round(float(new_time),1)
+        print("Time_Stamp", rounded_time)
+        
+        
+    recursive_listen(QGroundControl)
+
+def avionics_integration(output):
+    QGroundControl = mavutil.mavlink_connection('udpin:localhost:14445')
+    enabled = 1
+    while True:
+        
+        if enabled == 1:
+            enabled = 0
+            QGroundControl.wait_heartbeat()
+            Attitude = QGroundControl.recv_match(type='ATTITUDE', blocking=True)
+            Altitude = QGroundControl.recv_match(type='ALTITUDE', blocking=True)
+            Heading = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
+            GPS = QGroundControl.recv_match(type='GPS_RAW_INT', blocking=True)
+            Ground_speed = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
+            #GPS_RAW_INTs
+            mailbox = QGroundControl.messages.keys()
+            new_time = time.time()
+            local_time = time.localtime(new_time)
+            rounded_time = round(float(new_time),1)
+
+            export = {
+                "heading": Heading.heading,
+                "speed": Heading.groundspeed,
+                "altitude": Altitude.altitude_amsl,
+                "latitude": GPS.lat,
+                "longitude": GPS.lon,
+                "time_stamp": rounded_time
+            }
+            
+            print(export)
+            update_mission_data(export)
+
+            #Re enable loop
+            output.put(export)
+            enabled = 1
 
 # used for test data, reads packets as lines in txt file
 def import_packets_from_file(file_path):
@@ -31,9 +107,6 @@ def import_packets_from_file(file_path):
         print(f"File not found: {file_path}")
     except Exception as e:
         print(f"Error reading file: {e}")
-
-init_db()
-import_packets_from_file('test_packets.txt')
 
 class NavigationHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -129,38 +202,14 @@ class NavigationHandler(SimpleHTTPRequestHandler):
                     "alt": alt,
                     "high_temp": high_temp,
                     "low_temp": low_temp,
-                    "time_collected": time_stamp
+                    "time_stamp": time_stamp
                 }
 
                 process_packet(packet, name, "pending")
-                sync_to_firebase()
 
                 self._send_json_response({"message": "Packet added and sync initiated."})
             except Exception as e:
                 self._send_error_response(f"Failed to process packet: {str(e)}")
-
-        elif parsed_path.path == "/add_mission_data":
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            try:
-                packet_data = json.loads(post_data)
-                mission_time = packet_data.get("time", "00:00:00")
-                gps_data = packet_data.get("gps_data", [0.0, 0.0])
-                alt = packet_data.get("alt", 0.0)
-                heading = packet_data.get("heading", 0.0)
-                speed = packet_data.get("speed", 0.0)
-
-                update_mission_data(mission_time, gps_data, alt, heading, speed)
-                sync_to_firebase()
-
-                self._send_json_response({"message": "Mission data updated and sync initiated."})
-            except Exception as e:
-                self._send_error_response(f"Failed to update mission data: {str(e)}")
-
-
-
-        else:
-            self.send_error(404, "Endpoint not found")
 
     def _send_json_response(self, data):
         """Send a JSON response."""
@@ -176,15 +225,26 @@ class NavigationHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps({"error": error_message}).encode())
 
+def delayed_sync():
+    """Delay Firebase sync to ensure all data is processed first."""
+    time.sleep(2)  # ✅ Wait for mission data updates
+    sync_to_firebase()
 
-# Run the server
+# Run Server
 if __name__ == "__main__":
+    # Initialization
+    init_db()
+    import_packets_from_file('test_packets.txt')
+
+    # Start Avionics Process
+    q1 = mp.Queue()
+    p1 = mp.Process(target=avionics_integration, args=(q1,))
+    p1.start()
+    
+    # Start Server
     host_name = "localhost"
     port_number = 8000
     server = HTTPServer((host_name, port_number), NavigationHandler)
     print(f"Server running at http://{host_name}:{port_number}/pyro")
 
     server.serve_forever()
-
-    # Ensure pending data is synced when the server starts
-    sync_to_firebase()
