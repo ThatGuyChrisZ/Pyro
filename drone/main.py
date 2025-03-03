@@ -29,7 +29,7 @@ import struct
 import zlib
 import os
 from thermal_data import thermal_data
-from radio.packet_class._v3.packet import Packet, Packet_Info, Packet_Info_Dict
+from radio.packet_class._v4.packet import Packet, Packet_Info, Packet_Info_Dict
 
 pac_id_to_create = 1 # Global variable for creating the next packet id (don't kill me)
 UNSIGNED_INT_MAX = 2147483647
@@ -96,6 +96,7 @@ def data_structure_builder(q1,q2,q5):
             thermal.gps = (float(output[0]),float(output[1]))
             
             thermal.barometric = 400
+            thermal.time_stamp = time.time_ns()
             q2.put(thermal)
             
             #print("Output")
@@ -149,7 +150,8 @@ def create_packet(q3, q4):
                 gps_data=data.gps,             # GPS coordinates [latitude, longitude]
                 alt=data.barometric,           # Altitude in meters
                 high_temp=data.max_temp,       # Max temperature
-                low_temp=data.min_temp         # Min temperature
+                low_temp=data.min_temp,        # Min temperature
+                time_stamp=data.time_stamp     # Time stamp for when the info was pulled off the sensors
             )
 
             # Serialize the Packet
@@ -200,13 +202,14 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial):
                 if prog_mode != 0:
                     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} SENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-                    pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', ser_pac_to_send[:-4])
+                    pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<IffIhhq', ser_pac_to_send[:-4])
                     sent_packet = Packet(
                         pac_id=pac_id,
                         gps_data=[lat, lon],
                         alt=alt,
                         high_temp=high_temp,
-                        low_temp=low_temp
+                        low_temp=low_temp,
+                        time_stamp=time_stamp
                     )
                     print(sent_packet)
                 
@@ -256,13 +259,14 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial):
                     if prog_mode != 0:
                         print(f"SP: PACKET {ser_pac_to_send_info.pac_id} RESENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-                        pac_id, lat, lon, alt, high_temp, low_temp = struct.unpack('<IffIhh', ser_pac_to_send[:-4])
+                        pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<IffIhhq', ser_pac_to_send[:-4])
                         sent_packet = Packet(
                             pac_id=pac_id,
                             gps_data=[lat, lon],
                             alt=alt,
                             high_temp=high_temp,
-                            low_temp=low_temp
+                            low_temp=low_temp,
+                            time_stamp=time_stamp
                         )
                         print(sent_packet)
                     
