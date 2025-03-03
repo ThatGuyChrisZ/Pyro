@@ -152,8 +152,9 @@ class Packet_Info_Dict:
     def pop(self, pac_id):
         if self.contains(pac_id):
             self.master_dictionary.pop(pac_id)
+            return True
         else:
-            pass
+            return False
 
     def is_empty(self):
         if len(self.master_dictionary) == 0:

@@ -61,7 +61,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
     # UDP socket debug mode (local)
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        udp_socket.bind(("0.0.0.0", UDP_PORT))
+        udp_socket.bind(("127.0.0.1", UDP_PORT))
         print(f"RD: Listening for packets on UDP Port {UDP_PORT}...")
 
     # Mode 0|1: Read from RF serial
@@ -117,19 +117,24 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
             # ---------------- #
             # HANDSHAKE METHOD #
             # ---------------- #
-            # add CHECKSUM
-            ACK = struct.pack('<3sI', b"ACK", packet.pac_id)
+            ack_payload = struct.pack('<3sI', b"ACK", packet.pac_id)
+            ack_checksum = zlib.crc32(ack_payload)
+
+            ack_serialized_data = ack_payload + struct.pack('<I', ack_checksum)  # Append checksum as unsigned int
             
             if prog_mode != 2:
-                rf_serial.write(ACK)
+                rf_serial.write(ack_serialized_data)
             else:
-                udp_socket.sendto(ACK, addr)
-                print(f"RD: ACK for ID {packet.pac_id} sent to {addr}")
+                udp_socket.sendto(ack_serialized_data, DRONE_ADDRESS)
+                print(f"RD: ACK for ID {packet.pac_id} sent to {DRONE_ADDRESS}")
 
             # Print the decoded packet and send to the server
             if prog_mode != 0:
                 print(packet)
             send_packet_to_server(packet)
+            if prog_mode != 0:
+                print(f"RD: sent ACK packet for ID {packet.pac_id}")
+            print(f"ACK packet length: {len(ack_serialized_data)}")
 
         except struct.error as e:
             print(f"RD: Error decoding packet: {e}")
