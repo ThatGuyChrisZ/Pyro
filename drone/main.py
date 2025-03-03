@@ -417,16 +417,17 @@ def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port):
                 print("RD: Reading off the UDP socket . . .")
                 data, addr = udp_socket.recvfrom(ACK_PACKET_SIZE)
                 
-                print(f"RD: Received packet from {addr}")
+                #print(f"RD: Received packet from {addr}")
             # Read the serialized data from the RF module
             else:
                 data = rf_serial.read(ACK_PACKET_SIZE)
                 if prog_mode == 1:
-                    print(f"RD: received packet from {rf_serial_usb_port}")
+                    #print(f"RD: received packet from {rf_serial_usb_port}")
+                    pass
 
-            if prog_mode != 0:
-                print(f"RD: PACKET LENGTH: {len(data)}")
-                print(f'RD: PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
+            # if prog_mode != 0:
+            #     print(f"RD: PACKET LENGTH: {len(data)}")
+            #     print(f'RD: PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
             
             if len(data) < ACK_PACKET_SIZE:
                 if prog_mode != 0:
@@ -446,8 +447,15 @@ def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port):
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
             type, pac_id = struct.unpack('<3sI', ack_payload)
+            if prog_mode != 0:
+                print(f"RD: RECEIVED ACK FOR PACKET ID {pac_id}")
 
-            my_packet_info_dict.pop(pac_id)
+            successfully_pop_pac = my_packet_info_dict.pop(pac_id) # True/false value if popped pac_id off of the my_packet_info_dict struct
+            if prog_mode != 0:
+                if successfully_pop_pac == True:
+                    print(f"RD: SUCCESSFULLY POPPED PACKET ID {pac_id} OFF OF MY_PACKET_INFO_DICT")
+                else:
+                    print(f"RD: FAILED TO POP PACKET ID {pac_id} OFF OF MY_PACKET_INFO_DICT")
 
         except struct.error as e:
             print(f"RD: Error decoding packet: {e}")
