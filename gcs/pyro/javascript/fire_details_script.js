@@ -3,10 +3,10 @@ import { displayWeather } from "./weather_script.js";
 const fireName = new URLSearchParams(window.location.search).get("name");
 let currentGradient = {
     0.0: "blue",
-    0.3: "lime",
+    0.2: "lime",
     0.5: "yellow",
     0.8: "orange",
-    1: "red",
+    1.0: "red",
 };
 
 let map;
@@ -65,7 +65,7 @@ function calculateRadius(altitude, fov = DEFAULT_FOV) {
 
     const fovRadians = (fov * Math.PI) / 180;
     const groundCoverage = 2 * (altitude * Math.tan(fovRadians / 2)); // Calculate ground coverage
-    feetPerPixel = 513,468 / (2^maxZoom);
+    feetPerPixel = 513,468 / (2^(maxZoom/2));
 
     let radius = groundCoverage / feetPerPixel;
     print(radius);
@@ -104,7 +104,7 @@ async function loadFireHeatmap() {
         const normalizedData = heatmapData.map(p => [
             p.latitude,
             p.longitude,
-            (p.high_temp + p.low_temp) / 2 / (maxTemp - minTemp),
+            ((p.high_temp + p.low_temp) / 2 - minTemp) / (maxTemp - minTemp),
         ]);
 
         if (heatLayer) map.removeLayer(heatLayer);
@@ -114,8 +114,8 @@ async function loadFireHeatmap() {
         const avgAltitude = totalAltitude / heatmapData.length;
 
         heatLayer = L.heatLayer(normalizedData, {
-            radius: calculateRadius(avgAltitude),
-            blur: 35,
+            radius: calculateRadius(avgAltitude) * 3,
+            blur: 5,
             gradient: currentGradient,
         }).addTo(map);
     } catch (error) {

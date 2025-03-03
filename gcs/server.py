@@ -160,7 +160,7 @@ if __name__ == "__main__":
     host_name = "localhost"
     port_number = 8000
     server = HTTPServer((host_name, port_number), NavigationHandler)
-    print(f"Server running at http://{host_name}:{port_number}/scorch")
+    print(f"Server running at http://{host_name}:{port_number}/pyro")
 
     server.serve_forever()
 
