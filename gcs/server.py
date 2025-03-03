@@ -9,7 +9,8 @@ from database import (
     fetch_fire_list,
     fetch_heatmap_data,
     fetch_all_heatmap_data,
-    sync_to_firebase  # Import Firebase syncing function
+    sync_to_firebase,
+    update_mission_data
 )
 
 # used for test data, reads packets as lines in txt file
@@ -120,6 +121,7 @@ class NavigationHandler(SimpleHTTPRequestHandler):
                 alt = packet_data.get("alt", 0.0)
                 high_temp = packet_data.get("high_temp", 0.0)
                 low_temp = packet_data.get("low_temp", 0.0)
+                time_stamp = packet_data.get("time_stamp", 0.0)
 
                 packet = {
                     "pac_id": pac_id,
@@ -127,6 +129,7 @@ class NavigationHandler(SimpleHTTPRequestHandler):
                     "alt": alt,
                     "high_temp": high_temp,
                     "low_temp": low_temp,
+                    "time_collected": time_stamp
                 }
 
                 process_packet(packet, name, "pending")
