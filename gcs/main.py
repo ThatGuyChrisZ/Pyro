@@ -47,6 +47,21 @@ def send_packet_to_server(packet):
     except requests.RequestException as e:
         print(f"Error connecting to the server: {e}")
 
+def send_mission_data_to_server(file_path):
+
+    server_url = "http://localhost:8000/add_mission_data"  # Current Server Location
+    
+    response = requests.post(server_url, json=file_path)
+
+    try:
+        if response.status_code == 200:
+            print("Packet successfully sent to server.")
+        else:
+            print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
+    
+    except requests.RequestException as e:
+        print(f"Error connecting to the server: {e}")
+
 
 
 ########################################################################
