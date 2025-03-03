@@ -9,6 +9,8 @@ def recursive_listen(QGroundControl):
     Attitude = QGroundControl.recv_match(type='ATTITUDE', blocking=True)
     Altitude = QGroundControl.recv_match(type='ALTITUDE', blocking=True)
     Heading = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
+    GPS = QGroundControl.recv_match(type='GPS_RAW_INT', blocking=True)
+    #GPS_RAW_INT
     mailbox = QGroundControl.messages.keys()
     enable = 1
     if enable == 2:
@@ -24,6 +26,9 @@ def recursive_listen(QGroundControl):
         print("Altitudee",Altitude.altitude_amsl)
         print("Heading: ",Heading.heading)
         print("Ground Speed: ",Heading.groundspeed)
+        print("GPS lat: ", GPS.lat)
+        print("GPS lon: ", GPS.lon)
+        print("GPS Satelites: ", GPS.satellites_visible)
         new_time = time.time()
         local_time = time.localtime(new_time)
         rounded_time = round(float(new_time),1)
