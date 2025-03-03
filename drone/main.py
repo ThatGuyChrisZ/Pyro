@@ -10,9 +10,9 @@ print("test")
 
 import time
 import sys
-import board
-import busio
-import adafruit_mlx90640
+#import board
+#import busio
+#import adafruit_mlx90640
 import multiprocessing as mp
 # import ctypes
 import serial # for serial communication over usb
@@ -31,7 +31,7 @@ pac_id_to_create = 1 # Global variable for creating the next packet id
 UNSIGNED_INT_MAX = 2147483647
 
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
-rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 
 
 
@@ -231,7 +231,7 @@ if __name__ == '__main__':
     #Initialize thermal camera
     mlx = adafruit_mlx90640.MLX90640(i2c)
     print("MLX addr detected on I2C")
-    print([hex(i) for i in mlx.serial_number])
+    #print([hex(i) for i in mlx.serial_number])
 
     #Adjust thermal cameras refresh rate
     mlx.refresh_rate = adafruit_mlx90640.RefreshRate.REFRESH_4_HZ
@@ -269,7 +269,7 @@ if __name__ == '__main__':
     while True:
         #stamp = time.monotonic()
         try:			
-            mlx.getFrame(frame)
+            #mlx.getFrame(frame)
             q1.put(frame)
             #print("Main Thread running on core:",os.sched_getaffinity(pid)  )
         except ValueError:
