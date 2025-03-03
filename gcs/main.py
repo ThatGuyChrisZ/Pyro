@@ -47,8 +47,6 @@ def send_packet_to_server(packet):
     except requests.RequestException as e:
         print(f"Error connecting to the server: {e}")
 
-
-
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #
 #   Author: Robb Northrup                                              #

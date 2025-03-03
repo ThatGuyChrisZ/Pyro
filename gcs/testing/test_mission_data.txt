@@ -1,0 +1,8 @@
+{'heading': 93, 'speed': 0.14900657534599304, 'altitude': 1367.9156494140625, 'latitude': 395403690, 'longitude': -1198125921, 'time_collected': 1740990654.3}
+{'heading': 94, 'speed': 0.15161709487438202, 'altitude': 1367.3316650390625, 'latitude': 395403671, 'longitude': -1198125889, 'time_collected': 1740990654.6}
+{'heading': 107, 'speed': 0.25456202030181885, 'altitude': 1367.807373046875, 'latitude': 395403629, 'longitude': -1198125838, 'time_collected': 1740990655.3}
+{'heading': 120, 'speed': 0.30457666516304016, 'altitude': 1367.807373046875, 'latitude': 395403599, 'longitude': -1198125803, 'time_collected': 1740990655.6}
+{'heading': 134, 'speed': 0.45389220118522644, 'altitude': 1368.0926513671875, 'latitude': 395403559, 'longitude': -1198125756, 'time_collected': 1740990656.3}
+{'heading': 135, 'speed': 0.5259546637535095, 'altitude': 1367.807373046875, 'latitude': 395403541, 'longitude': -1198125738, 'time_collected': 1740990656.6}
+{'heading': 140, 'speed': 0.7092614769935608, 'altitude': 1367.90234375, 'latitude': 395403490, 'longitude': -1198125638, 'time_collected': 1740990657.3}
+{'heading': 145, 'speed': 0.7911951541900635, 'altitude': 1367.52197265625, 'latitude': 395403450, 'longitude': -1198125557, 'time_collected': 1740990657.6}
