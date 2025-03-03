@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fire Details</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .menu-bar {
+            background-color: #333;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            height: 60px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 1000;
+        }
+
+        .menu-bar .logo {
+            height: 50px;
+            width: auto;
+            object-fit: contain;
+            margin-right: 15px;
+        }
+
+        .menu-bar .menu {
+            display: flex;
+            align-items: center;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .menu-bar .menu-item {
+            position: relative;
+            margin: 0 15px;
+        }
+
+        .menu-bar .menu-item a {
+            text-decoration: none;
+            color: white;
+            font-size: 18px;
+            padding: 5px 10px;
+            transition: color 0.3s;
+        }
+
+        .menu-bar .menu-item a:hover {
+            color: #ff9800;
+        }
+
+        /* Dropdown styling */
+        .dropdown {
+            display: none;
+            position: absolute;
+            top: 100%; /* Position dropdown below the menu item */
+            left: 0;
+            background-color: #444;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 1001;
+        }
+
+        .dropdown a {
+            display: block;
+            padding: 10px 15px;
+            color: white;
+            text-decoration: none;
+            font-size: 16px;
+        }
+
+        .dropdown a:hover {
+            background-color: #555;
+            color: #ff9800;
+        }
+
+        .menu-item:hover .dropdown {
+            display: block;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .controls select, .controls input {
+            padding: 5px;
+            font-size: 16px;
+        }
+
+        .gradient-options {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .gradient-option {
+            width: 100px;
+            height: 15px;
+            margin: 5px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .map-container {
+            position: relative;
+        }
+
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+
+        #fire-title {
+            text-align: center;
+            font-size: 24px;
+            margin-top: 20px;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+            font-size: 14px;
+            line-height: 1.5;
+            z-index: 1001;
+        }
+
+        .search-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .legend .color-bar {
+            height: 10px;
+            margin: 5px 0;
+        }
+
+        #weather-sidebar {
+            position: absolute;
+            right: 0;
+            top: 60px;
+            width: 300px;
+            background-color: #f9f9f9;
+            border-left: 1px solid #ccc;
+            box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            z-index: 1000;
+            font-family: Arial, sans-serif;
+        }
+
+        #weather-sidebar h2 {
+            font-size: 18px;
+            margin: 0 0 10px;
+        }
+
+        #weather-sidebar p {
+            margin: 5px 0;
+        }
+
+        .weather-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .weather-info {
+            flex: 1;
+            margin-right: 10px;
+        }
+
+        #weather-image {
+            max-width: 100px;
+            max-height: 100px;
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="menu-bar">
+        <img src="assets\team-logo.png" alt="Team Logo" class="logo">
+        <ul class="menu">
+            <li class="menu-item">
+                <a href="index.html">Tracking</a>
+                <div class="dropdown">
+                    <a href="index.html">Active Wildfires</a>
+                    <a href="past.html">Past Wildfires</a>
+                </div>
+            </li>
+            <li class="menu-item"><a href="data.html">Data</a></li>
+            <li class="menu-item"><a href="about.html">About</a></li>
+            <li class="menu-item"><a href="contact.html">Contact Us</a></li>
+        </ul>
+    </div>
+
+    <div class="content">
+        <h1 id="fire-title">Fire Details</h1>
+    
+        <!-- Search Bar for Location -->
+        <div class="search-bar">
+            <input type="text" id="search-location" placeholder="Enter location (e.g., city or ZIP)">
+            <button onclick="searchMap()">Search</button>
+        </div>        
+    
+        <div class="controls">
+            <label for="date-select">Date:</label>
+            <input type="date" id="date-select">
+            <label for="time-select">Time:</label>
+            <input type="time" id="time-select">
+        </div>
+    
+        <div class="gradient-options" id="color-key">
+            <div class="gradient-option" style="background: linear-gradient(to right, blue, lime, yellow, orange, red);" data-gradient='{"0":"blue","0.2":"lime","0.5":"yellow","0.8":"orange","1":"red"}'></div>
+        </div>
+    
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="legend">
+                <strong>Temperature Key (°C):</strong>
+                <div class="color-bar" style="background: linear-gradient(to right, blue, lime, yellow, orange, red);"></div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span id="low-temp">Low</span>
+                    <span id="high-temp">High</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="weather-sidebar">
+            <h2>Current Weather</h2>
+            <div class="weather-content">
+                <div class="weather-info">
+                    <p id="weather-description">Loading...</p>
+                    <p><strong>Temperature:</strong> <span id="weather-temperature">-</span>°C</p>
+                    <p><strong>Humidity:</strong> <span id="weather-humidity">-</span>%</p>
+                    <p><strong>Wind Speed:</strong> <span id="weather-wind">-</span> m/s</p>
+                </div>
+                <img id="weather-image" alt="Weather image" style="max-width: 100px; max-height: 100px; border-radius: 8px; display: none;">
+            </div>
+            <button id="refresh-weather">Refresh Weather</button>
+        </div>        
+    </div>
+    
+    <script src="javascript/fire_details_script.js?v=1.0" type="module"></script>
+    <script src="javascript/weather_script.js?v=1.0" type="module"></script>    
+</body>
+</html>

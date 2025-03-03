@@ -1,3 +1,8 @@
+# ///////////////////////////////////////////////////
+# contributed by Robb Northrup
+# ///////////////////////////////////////////////////
+
+
 # rpt -> Radio protocol test script
 # Running into issue where the GCS is only receiving 6-12 bytes of the data packets
 # This script is used to help aleviate this issue
