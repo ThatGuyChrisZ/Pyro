@@ -15,6 +15,9 @@ prog_mode = 2
           #      2.) Data intended to be sent over RF is sent through interprocess communication
           #          means for debugging purposes
 
+# --------------- #
+# IMPORT PACKAGES #
+# --------------- #
 import time
 # import sys
 import argparse
@@ -29,12 +32,21 @@ import struct
 import zlib
 import os
 import random
+import csv
 from thermal_data import thermal_data
 from radio.packet_class._v4.packet import Packet, Packet_Info, Packet_Info_Dict
+import logging
+import logging.handlers
 
+# ----------------- #
+# PAC-ID MANAGEMENT #
+# ----------------- #
 pac_id_to_create = 1 # Global variable for creating the next packet id (don't kill me)
 UNSIGNED_INT_MAX = 2147483647
 
+# ------------------ #
+# NETWORK MANAGEMENT #
+# ------------------ #
 # rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 ACK_PACKET_SIZE = 11 # String (of three letters) [3] + integer size (pac_id) [4] + checksum [4]
 GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
@@ -42,6 +54,12 @@ gps_sim_file = open('sim_gps.txt', 'r')
 UDP_PORT = 5004
 # alt_sim_file = open('alt_gps.txt', 'r')
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
+
+# --------------- #
+# LOGS MANAGEMENT #
+# --------------- #
+LOG_DIR = "logs"  # Folder to store logs
+os.makedirs(LOG_DIR, exist_ok=True)
 
 
 
@@ -176,7 +194,7 @@ def create_packet(q3, q4):
 #   Description: Send serialized packets over RF to the GCS            #                            
 #   Return: None                                                       #
 ########################################################################
-def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial):
+def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listener):
     pid = os.getpid()
     
     if hasattr(os, 'sched_setaffinity'):
@@ -192,7 +210,9 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial):
         #                   (from my_packet_info_dict)
         # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////////
         size_unacked_pacs = my_packet_info_dict.size()
-        size_new_pacs = q4.qsize()  # Using qsize() for queue size
+        size_new_pacs = q4.__sizeof__()  # Using qsize() for queue size
+        if prog_mode != 0:
+            print(f"SP: Q_NEWPAC_SIZE = {size_new_pacs}  |   Q_UNACKPAC_SIZE: {size_unacked_pacs}")
         size_total_pac_queues = size_unacked_pacs + size_new_pacs
         resend_priority = (size_unacked_pacs / size_total_pac_queues) if size_total_pac_queues > 0 else 0  # Prevent div by zero
         # ----------Why Random?----------
@@ -298,11 +318,11 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial):
         
         
 
-        # if q4 and packet_info_dict are empty . . .
+        # if q4 is empty and packet_info_dict elements have not timed out . . .
         else:
             pass
         
-        time.sleep(5)
+        time.sleep(2)
 
 
 
@@ -375,7 +395,7 @@ def transmit_packet(ser_pac_to_send_info, q_unack_pac_info, udp_socket):
 #   Description:                                                       #                            
 #   Return: None                                                       #
 ########################################################################
-def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port):
+def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port, log_radio_listener):
     # UDP socket debug mode (local)
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -454,6 +474,44 @@ class MyManager(mp.managers.BaseManager):
     pass
 
 MyManager.register('Packet_Info_Dict', Packet_Info_Dict)
+
+
+
+########################################################################
+#   Function Name: log_radio_logger()                                  #
+#   Author: Robb Northrup                                              #
+#   Parameters:  q_radio_log                                           #
+#   Description: This is is the function/process used to log radio     #
+#                transmissions for debugging and performance eval.     #
+#   Return: None                                                       #
+########################################################################
+CSV_LOG_FILE = "log_radio.csv"
+def setup_csv_logger():
+    """Ensure CSV file has headers if it does not exist."""
+    if not os.path.exists(CSV_LOG_FILE):
+        with open(CSV_LOG_FILE, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["timestamp", "queue_size", "packet_id", "data_size"])  # Define CSV headers
+
+def csv_log_listener(log_queue):
+    """Process that listens for logs and writes them to CSV."""
+    setup_csv_logger()
+    
+    with open(CSV_LOG_FILE, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        
+        while True:
+            try:
+                record = log_queue.get()
+                if record is None:
+                    break  # Stop listener when None is received
+                
+                writer.writerow([record["timestamp"], record["queue_size"], record["packet_id"], record["data_size"]])
+                file.flush()  # Flush immediately to prevent data loss
+            
+            except Exception as e:
+                print("Logging error:", e)
+
 
 
 ########################################################################
@@ -549,16 +607,18 @@ if __name__ == '__main__':
         q3 = mp.Queue()
         q4 = mp.Queue()
         q5 = mp.Queue() # simulation queue
+        q_log_queue = mp.Queue() # queue for storing logs
 
         # Initialize threads for processing and transmitting radio data
         if prog_mode != 0:
             print("TEST_MAIN 4")
-        p1 = mp.Process(target=data_structure_builder, args=(q1,q2,q5))
+        p1 = mp.Process(target=data_structure_builder, args=(q1,q2,q5,))
         p2 = mp.Process(target=data_processing, args=(q2,q3,))
         p3 = mp.Process(target=create_packet, args=(q3,q4,))
-        p4 = mp.Process(target=send_packet, args=(q4,my_packet_info_dict,prog_mode,rf_serial))
-        p5 = mp.Process(target=gps_sim, args=(q5,))
-        p_recieve_packets = mp.Process(target=receive_and_decode, args=(my_packet_info_dict,prog_mode,rf_serial,))
+        p4 = mp.Process(target=send_packet, args=(q4,my_packet_info_dict,prog_mode,rf_serial,q_log_queue,))
+        p5 = mp.Process(target=gps_sim, args=(q5,)) # sim flight queue
+        p_recieve_packets = mp.Process(target=receive_and_decode, args=(my_packet_info_dict,prog_mode,rf_serial,q_log_queue,))
+        p_logger_radio = mp.Process(target=log_radio_listener, args=(q_log_queue,))
 
         # Start threads
         if prog_mode != 0:
@@ -569,6 +629,7 @@ if __name__ == '__main__':
         p4.start()
         p5.start()
         p_recieve_packets.start()
+        p_logger_radio.start()
         
         #print(q.get())
         #p.join()
