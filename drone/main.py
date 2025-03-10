@@ -37,6 +37,7 @@ from thermal_data import thermal_data
 from radio.packet_class._v4.packet import Packet, Packet_Info, Packet_Info_Dict
 import logging
 import logging.handlers
+import datetime
 
 # ----------------- #
 # PAC-ID MANAGEMENT #
@@ -58,7 +59,7 @@ UDP_PORT = 5004
 # --------------- #
 # LOGS MANAGEMENT #
 # --------------- #
-LOG_DIR = "logs"  # Folder to store logs
+LOG_DIR = "trans_logs"  # Folder to store logs of packet transmissions
 os.makedirs(LOG_DIR, exist_ok=True)
 
 
@@ -210,7 +211,7 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
         #                   (from my_packet_info_dict)
         # \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\//////////////////////////////////////
         size_unacked_pacs = my_packet_info_dict.size()
-        size_new_pacs = q4.__sizeof__()  # Using qsize() for queue size
+        size_new_pacs = q4.qsize()  # Using qsize() for queue size
         if prog_mode != 0:
             print(f"SP: Q_NEWPAC_SIZE = {size_new_pacs}  |   Q_UNACKPAC_SIZE: {size_unacked_pacs}")
         size_total_pac_queues = size_unacked_pacs + size_new_pacs
@@ -238,8 +239,13 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
                 # if prog_mode != 0:
                 #     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} REQ SENT")
                 
+                #for saving to pac_info_dict
                 ser_pac_to_send_info = my_packet_info_dict.peek_top_packet_info()
                 ser_pac_to_send = ser_pac_to_send_info.serialized_packet
+                #for logging
+                id_pac_to_send = ser_pac_to_send_info.get_pac_id()
+                trans_pac_to_send = ser_pac_to_send_info.get_transmissions()
+                #remove from pac_info_dict
                 my_packet_info_dict.pop(ser_pac_to_send_info.pac_id) # remove from dictionary (to be added again once resent)
 
                 if prog_mode != 0:
@@ -252,7 +258,17 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
                     else:
                         udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
                     
+                    # --- #
+                    # LOG #
+                    # --- #
                     ser_pac_to_send_info.set_timestamp(time.time_ns())
+                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                    trans_type = None
+                    if prog_mode != 2:
+                        trans_type = 'RF'
+                    else:
+                        trans_type = 'UDP'
+                    log_radio_listener.put({"timestamp": timestamp, "trans_type": trans_type, "packet_id": id_pac_to_send, "send(s)/receive(r)": 's', "num_transmissions": trans_pac_to_send, "unsent_pac_queue_size": q4.qsize(), "unacked_pac_queue_size": my_packet_info_dict.size()})
                     if prog_mode != 0:
                         print(f"SP: PACKET {ser_pac_to_send_info.pac_id} RESENT AT {ser_pac_to_send_info.get_timestamp()}")
 
@@ -282,6 +298,9 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
         elif not q4.empty():
             ser_pac_to_send_info = q4.get()
             ser_pac_to_send = ser_pac_to_send_info.serialized_packet
+            #for logging
+            id_pac_to_send = ser_pac_to_send_info.get_pac_id()
+            trans_pac_to_send = ser_pac_to_send_info.get_transmissions()
             
             try:
                 if prog_mode != 2:
@@ -291,6 +310,7 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
                     udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
                 
                 ser_pac_to_send_info.set_timestamp(time.time_ns())
+
                 if prog_mode != 0:
                     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} SENT AT {ser_pac_to_send_info.get_timestamp()}")
 
@@ -311,6 +331,17 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
                 my_packet_info_dict.add(ser_pac_to_send_info)
                 if prog_mode != 0:
                     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON PACKET_INFO_DICT")
+
+                # --- #
+                # LOG #
+                # --- #
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                trans_type = None
+                if prog_mode != 2:
+                    trans_type = 'RF'
+                else:
+                    trans_type = 'UDP'
+                log_radio_listener.put({"timestamp": timestamp, "trans_type": trans_type, "packet_id": id_pac_to_send, "send(s)/receive(r)": 's', "num_transmissions": trans_pac_to_send, "unsent_pac_queue_size": q4.qsize(), "unacked_pac_queue_size": my_packet_info_dict.size()})
                 
                 
             except serial.SerialException as e:
@@ -485,19 +516,22 @@ MyManager.register('Packet_Info_Dict', Packet_Info_Dict)
 #                transmissions for debugging and performance eval.     #
 #   Return: None                                                       #
 ########################################################################
-CSV_LOG_FILE = "log_radio.csv"
-def setup_csv_logger():
-    """Ensure CSV file has headers if it does not exist."""
-    if not os.path.exists(CSV_LOG_FILE):
-        with open(CSV_LOG_FILE, mode="w", newline="") as file:
-            writer = csv.writer(file)
-            writer.writerow(["timestamp", "queue_size", "packet_id", "data_size"])  # Define CSV headers
+def get_flight_log_filename():
+    """Generate a unique filename for each flight log based on timestamp."""
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    return os.path.join(LOG_DIR, f"{timestamp}.csv")
 
-def csv_log_listener(log_queue):
+def setup_csv_logger(csv_file):
+    """Ensure CSV file has headers."""
+    with open(csv_file, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["timestamp", "trans_type", "packet_id", "send(s)/receive(r)", "num_transmissions", "unsent_pac_queue_size", "unacked_pac_queue_size"])  # Define CSV headers
+
+def radio_log_listener(log_queue, csv_file):
     """Process that listens for logs and writes them to CSV."""
-    setup_csv_logger()
+    setup_csv_logger(csv_file)
     
-    with open(CSV_LOG_FILE, mode="a", newline="") as file:
+    with open(csv_file, mode="a", newline="") as file:
         writer = csv.writer(file)
         
         while True:
@@ -506,7 +540,7 @@ def csv_log_listener(log_queue):
                 if record is None:
                     break  # Stop listener when None is received
                 
-                writer.writerow([record["timestamp"], record["queue_size"], record["packet_id"], record["data_size"]])
+                writer.writerow([record["timestamp"], record["trans_type"], record["packet_id"], record["send(s)/receive(r)"], record["num_transmissions"], record["unsent_pac_queue_size"], record["unacked_pac_queue_size"]])
                 file.flush()  # Flush immediately to prevent data loss
             
             except Exception as e:
@@ -618,7 +652,7 @@ if __name__ == '__main__':
         p4 = mp.Process(target=send_packet, args=(q4,my_packet_info_dict,prog_mode,rf_serial,q_log_queue,))
         p5 = mp.Process(target=gps_sim, args=(q5,)) # sim flight queue
         p_recieve_packets = mp.Process(target=receive_and_decode, args=(my_packet_info_dict,prog_mode,rf_serial,q_log_queue,))
-        p_logger_radio = mp.Process(target=log_radio_listener, args=(q_log_queue,))
+        p_logger_radio = mp.Process(target=radio_log_listener, args=(q_log_queue, get_flight_log_filename()))
 
         # Start threads
         if prog_mode != 0:

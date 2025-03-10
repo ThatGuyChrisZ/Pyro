@@ -130,7 +130,7 @@ class Packet_Info_Dict:
         return self.master_dictionary[pac_id]
     
     def size(self):
-        return self.master_dictionary.__sizeof__()
+        return len(self.master_dictionary)
     
     def peek_top_packet_info(self):
         # Could be implemented better, possible store top_key with metadata of the class?
