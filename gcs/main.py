@@ -10,12 +10,22 @@ import serial
 import socket # For UDP socket transmission in MODE 2
 import requests
 import argparse
+import multiprocessing as mp
 from packet_class._v4.packet import Packet
+import time
+import os
+import csv
 
 PACKET_SIZE = 32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
 DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
+
+# --------------- #
+# LOGS MANAGEMENT #
+# --------------- #
+LOG_DIR = "trans_logs"  # Folder to store logs of packet transmissions
+os.makedirs(LOG_DIR, exist_ok=True)
 
 
 
@@ -26,26 +36,75 @@ UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 #   Description:                                                       #
 #   Return:                                                            #
 ########################################################################
-def send_packet_to_server(packet):
+def send_packet_to_server(q_unser_packets):
     """Sends the decoded packet to the server."""
     server_url = "http://localhost:8000/add_packet"  # Current Server Location
-    try:
-        packet_data = {
-            "pac_id": packet.pac_id,
-            "gps_data": packet.gps_data,
-            "alt": packet.alt,
-            "high_temp": packet.high_temp,
-            "low_temp": packet.low_temp,
-            "time_stamp": packet.time_stamp
-        }
 
-        response = requests.post(server_url, json=packet_data)
-        if response.status_code == 200:
-            print("Packet successfully sent to server.")
+    while True:
+        if not q_unser_packets.empty():
+            try:
+                packet = q_unser_packets.get()
+
+                packet_data = {
+                    "pac_id": packet.pac_id,
+                    "gps_data": packet.gps_data,
+                    "alt": packet.alt,
+                    "high_temp": packet.high_temp,
+                    "low_temp": packet.low_temp,
+                    "time_stamp": packet.time_stamp
+                }
+
+                response = requests.post(server_url, json=packet_data)
+                if response.status_code == 200:
+                    print("Packet successfully sent to server.")
+                else:
+                    print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
+            except requests.RequestException as e:
+                print(f"Error connecting to the server: {e}")
         else:
-            print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
-    except requests.RequestException as e:
-        print(f"Error connecting to the server: {e}")
+            pass
+
+
+
+########################################################################
+#   Function Name: log_radio_logger()                                  #
+#   Author: Robb Northrup                                              #
+#   Parameters:  q_radio_log                                           #
+#   Description: This is is the function/process used to log radio     #
+#                transmissions for debugging and performance eval.     #
+#   Return: None                                                       #
+########################################################################
+def get_flight_log_filename():
+    """Generate a unique filename for each flight log based on timestamp."""
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    return os.path.join(LOG_DIR, f"{timestamp}.csv")
+
+def setup_csv_logger(csv_file):
+    """Ensure CSV file has headers."""
+    with open(csv_file, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["timestamp", "packet_id", "send(s)/receive(r)", "trans_type", "num_transmissions", "unsent_pac_queue_size", "unacked_pac_queue_size"])  # Define CSV headers
+
+def radio_log_listener(log_queue, csv_file):
+    """Process that listens for logs and writes them to CSV."""
+    setup_csv_logger(csv_file)
+    
+    with open(csv_file, mode="a", newline="") as file:
+        writer = csv.writer(file)
+        
+        while True:
+            try:
+                record = log_queue.get()
+                if record is None:
+                    break  # Stop listener when None is received
+                
+                writer.writerow([record["timestamp"], record["packet_id"], record["send(s)/receive(r)"], record["trans_type"], record["num_transmissions"], record["unsent_pac_queue_size"], record["unacked_pac_queue_size"]])
+                file.flush()  # Flush immediately to prevent data loss
+            
+            except Exception as e:
+                print("Logging error:", e)
+
+
 
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #
@@ -55,7 +114,7 @@ def send_packet_to_server(packet):
 #                and send the packets to send_packet_to_server()       #                                                              #
 #   Return: None                                                       #
 ########################################################################
-def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
+def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port, q_unser_packets, q_log):
     # UDP socket debug mode (local)
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -129,7 +188,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
             # Print the decoded packet and send to the server
             if prog_mode != 0:
                 print(packet)
-            send_packet_to_server(packet)
+            q_unser_packets.put(packet)
             if prog_mode != 0:
                 print(f"RD: sent ACK packet for ID {packet.pac_id}")
             print(f"ACK packet length: {len(ack_serialized_data)}")
@@ -138,6 +197,11 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
             print(f"RD: Error decoding packet: {e}")
         except serial.SerialException as e:
             print(f"RD: Serial communication error: {e}")
+
+
+        # --- #
+        # LOG #
+        # --- #
 
 
 
@@ -149,6 +213,9 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
+    # ---------------- #
+    # GET PROGRAM MODE #
+    # ---------------- #
     prog_mode = 0 # Default mode is normal (not debugging)
     rf_serial = None
     usb_port_trans = None
@@ -164,4 +231,12 @@ if __name__ == '__main__':
     if usb_port_trans == 'q':
         quit()
     else:
-        receive_and_decode_packets(prog_mode, rf_serial, usb_port_trans)
+        # ------------------ #
+        # START MAIN PROCESS #
+        # ------------------ #
+        q_unser_packets = mp.Queue()
+        q_log = mp.Queue()
+
+        p_rad_log_listener = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename()))
+        p_rec_and_dec = mp.Process(target=receive_and_decode_packets, args=(prog_mode, rf_serial, usb_port_trans, q_unser_packets, q_log))
+        p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets))
