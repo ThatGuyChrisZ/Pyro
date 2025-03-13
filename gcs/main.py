@@ -15,6 +15,7 @@ from packet_class._v4.packet import Packet
 import time
 import os
 import csv
+import numpy
 
 PACKET_SIZE = 32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
@@ -130,6 +131,9 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port, q_unser
             print(f"RD: Error opening serial port: {e}")
             return
         
+    # Dictionary for logging packet transmissions
+    data_pacs_received = {} # House the number of times a packet has been received
+        
     # Program loop for receiving, deserializing, sending ACKs, and shipping
     # off packets to the send_packet_to_server() method
     while True:
@@ -142,6 +146,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port, q_unser
             else:
                 data = rf_serial.read(PACKET_SIZE)
 
+            # Decode Packet info for debugging modes
             if prog_mode != 0:
                 print(f"\nPACKET LENGTH: {len(data)}")
                 print(f'PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
@@ -184,24 +189,41 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port, q_unser
             else:
                 udp_socket.sendto(ack_serialized_data, DRONE_ADDRESS)
                 print(f"RD: ACK for ID {packet.pac_id} sent to {DRONE_ADDRESS}")
+                print(f"RD: ACK packet length: {len(ack_serialized_data)}")
 
-            # Print the decoded packet and send to the server
+            # Print the decoded packet
             if prog_mode != 0:
                 print(packet)
-            q_unser_packets.put(packet)
-            if prog_mode != 0:
-                print(f"RD: sent ACK packet for ID {packet.pac_id}")
-            print(f"ACK packet length: {len(ack_serialized_data)}")
+
+            # Has the DAT Packet already been received?
+            if pac_id in data_pacs_received:
+                data_pacs_received[pac_id] = data_pacs_received[pac_id] + 1
+                if prog_mode != 0:
+                    print(f"RD: DAT Packet ID {pac_id} already has been received {data_pacs_received.get(pac_id)} times!")
+            else:
+                q_unser_packets.put(packet)
+                data_pacs_received[pac_id] = 1
+                if prog_mode != 0:
+                    print(f"RD: DAT Packet ID {pac_id} has been received for the first time")
+
+            # --- #
+            # LOG #
+            # --- #
+            # Could be fixed for differenting between timestamps for sent ACKs and received DATs
+            id_pac_recieved = pac_id
+            trans_pac_received = data_pacs_received[pac_id] # Number of times the packet has been recieved
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            trans_type = None
+            if prog_mode != 2:
+                trans_type = 'RF'
+            else:
+                trans_type = 'UDP'
+            q_log.put({"timestamp": timestamp, "packet_id": id_pac_recieved, "send(s)/receive(r)": 's', "trans_type": trans_type,  "num_transmissions": trans_pac_to_send, "unsent_pac_queue_size": q4.qsize(), "unacked_pac_queue_size": my_packet_info_dict.size()})
 
         except struct.error as e:
             print(f"RD: Error decoding packet: {e}")
         except serial.SerialException as e:
             print(f"RD: Serial communication error: {e}")
-
-
-        # --- #
-        # LOG #
-        # --- #
 
 
 
