@@ -17,7 +17,7 @@ async function fetchWeather(lat, lon) {
 
         return {
             description: weatherData.weather[0].description,
-            temperature: weatherData.main.temp,
+            temperature: weatherData.main.temp * (9/5) + 32,
             humidity: weatherData.main.humidity,
             windSpeed: weatherData.wind.speed,
         };
@@ -35,7 +35,7 @@ async function displayWeather(lat, lon) {
         console.log("Weather data:", weather);
 
         document.getElementById("weather-description").textContent = weather.description;
-        document.getElementById("weather-temperature").textContent = weather.temperature.toFixed(1);
+        document.getElementById("weather-temperature").textContent = weather.temperature.toFixed(1) * (9/5) + 32;
         document.getElementById("weather-humidity").textContent = weather.humidity;
         document.getElementById("weather-wind").textContent = weather.windSpeed.toFixed(1);
 

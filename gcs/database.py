@@ -150,7 +150,7 @@ def process_packet(packet, name, status="active"):
         )
         duplicate_count = cursor.fetchone()[0]
         if duplicate_count > 0:
-            print(f"Duplicate packet (pac_id: {pac_id}, time_stamp: {time_stamp}) found. Skipping insertion.")
+            #print(f"Duplicate packet (pac_id: {pac_id}, time_stamp: {time_stamp}) found. Skipping insertion.")
             conn.close()
             return
 
@@ -418,15 +418,13 @@ def update_mission_data(export):
             record_id, record_time = result
             update_query = """
                 UPDATE wildfires
-                SET latitude = ?,
-                    longitude = ?,
-                    alt = ?,
+                SET 
                     heading = ?,
                     speed = ?,
                     sync_status = 'pending'
                 WHERE id = ?
             """
-            cursor.execute(update_query, (gps_lat, gps_lon, alt, heading, speed, record_id))
+            cursor.execute(update_query, (heading, speed, record_id))
             conn.commit()
             if cursor.rowcount == 0:
                 print("❌ No wildfire record updated.")

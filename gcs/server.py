@@ -46,7 +46,7 @@ def recursive_listen(QGroundControl):
         print("GPS lat: ", GPS.lat)
         print("GPS lon: ", GPS.lon)
         print("GPS Satelites: ", GPS.satellites_visible)
-        new_time = time.time()
+        new_time = time.time_ns()
         local_time = time.localtime(new_time)
         rounded_time = round(float(new_time),1)
         print("Time_Stamp", rounded_time)
@@ -69,9 +69,9 @@ def avionics_integration(output):
             Ground_speed = QGroundControl.recv_match(type='VFR_HUD', blocking=True)
             #GPS_RAW_INTs
             mailbox = QGroundControl.messages.keys()
-            new_time = time.time()
-            local_time = time.localtime(new_time)
-            rounded_time = round(float(new_time),1)
+            new_time = time.time_ns()
+            #local_time = time.localtime(new_time)
+            #rounded_time = round(float(new_time),1)
 
             export = {
                 "heading": Heading.heading,
@@ -79,7 +79,7 @@ def avionics_integration(output):
                 "altitude": Altitude.altitude_amsl,
                 "latitude": GPS.lat,
                 "longitude": GPS.lon,
-                "time_stamp": rounded_time
+                "time_stamp": new_time
             }
             
             print(export)
