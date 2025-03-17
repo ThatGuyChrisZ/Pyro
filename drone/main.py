@@ -49,12 +49,21 @@ UNSIGNED_INT_MAX = 2147483647
 # NETWORK MANAGEMENT #
 # ------------------ #
 # rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+# alt_sim_file = open('alt_gps.txt', 'r')
+# packet_lib = ctypes.CDLL('./packet_class/packet.so')
 ACK_PACKET_SIZE = 11 # String (of three letters) [3] + integer size (pac_id) [4] + checksum [4]
 GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
 gps_sim_file = open('sim_gps.txt', 'r')
 UDP_PORT = 5004
-# alt_sim_file = open('alt_gps.txt', 'r')
-# packet_lib = ctypes.CDLL('./packet_class/packet.so')
+CALL_SIGN = "KK72PA"
+RF_TRANCIEVER_PORT = '/dev/ttyUSB1'
+rf_serial = None
+
+# ----------------------- #
+# THERMAL CAMERA SETTINGS #
+# ----------------------- #
+PRINT_TEMPERATURES = True
+PRINT_ASCIIART = False
 
 # --------------- #
 # LOGS MANAGEMENT #
@@ -197,7 +206,7 @@ def create_packet(q3, q4):
 #   Description: Send serialized packets over RF to the GCS            #                            
 #   Return: None                                                       #
 ########################################################################
-def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listener):
+def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
     pid = os.getpid()
     
     if hasattr(os, 'sched_setaffinity'):
@@ -231,62 +240,55 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
             if prog_mode != 0:
                 print(f"SP: ID {my_packet_info_dict.peek_top_pac_id()} timed out")
 
-            # IF STATEMENT REDUNDANT
-            if my_packet_info_dict.check_top_timeout() is True:
-                #for saving to pac_info_dict
-                ser_pac_to_send_info = my_packet_info_dict.peek_top_packet_info()
-                ser_pac_to_send = ser_pac_to_send_info.serialized_packet
-                
-                #remove from pac_info_dict
-                my_packet_info_dict.pop(ser_pac_to_send_info.pac_id) # remove from dictionary (to be added again once resent)
-
-                if prog_mode != 0:
-                    print(f"SP: PACKET {ser_pac_to_send_info.get_pac_id()} RESENDING . . .")
+            #for saving to pac_info_dict
+            ser_pac_to_send_info = my_packet_info_dict.peek_top_packet_info()
+            ser_pac_to_send = ser_pac_to_send_info.serialized_packet
             
-                try:
-                    if prog_mode != 2:
-                        rf_serial.flush()
-                        rf_serial.write(ser_pac_to_send)
-                    else:
-                        udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
-                    
-                    # --- #
-                    # LOG #
-                    # --- #
-                    ser_pac_to_send_info.set_timestamp(time.time_ns())
-                    #for logging
-                    id_pac_to_send = ser_pac_to_send_info.get_pac_id()
-                    trans_pac_to_send = ser_pac_to_send_info.get_transmissions()
-                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                    trans_type = None
-                    if prog_mode != 2:
-                        trans_type = 'RF'
-                    else:
-                        trans_type = 'UDP'
-                    log_radio_listener.put({"timestamp": timestamp, "packet_id": id_pac_to_send, "send(s)/receive(r)": 's', "trans_type": trans_type,  "num_transmissions": trans_pac_to_send, "unsent_pac_queue_size": q4.qsize(), "unacked_pac_queue_size": my_packet_info_dict.size()})
-                    if prog_mode != 0:
-                        print(f"SP: PACKET {ser_pac_to_send_info.pac_id} RESENT AT {ser_pac_to_send_info.get_timestamp()}")
+            #remove from pac_info_dict
+            my_packet_info_dict.pop(ser_pac_to_send_info.pac_id) # remove from dictionary (to be added again once resent)
 
-                        pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<IffIhhq', ser_pac_to_send[:-4])
-                        sent_packet = Packet(
-                            pac_id=pac_id,
-                            gps_data=[lat, lon],
-                            alt=alt,
-                            high_temp=high_temp,
-                            low_temp=low_temp,
-                            time_stamp=time_stamp
-                        )
-                        print(sent_packet)
-                    
-                    # ---------------- #
-                    # HANDSHAKE METHOD #
-                    # ---------------- #
-                    my_packet_info_dict.add(ser_pac_to_send_info)
-                    if prog_mode != 0:
-                        print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON PACKET_INFO_DICT")
+            if prog_mode != 0:
+                print(f"SP: PACKET {ser_pac_to_send_info.get_pac_id()} RESENDING . . .")
+        
+            try:
+                if prog_mode != 2:
+                    rf_serial.flush()
+                    rf_serial.write(ser_pac_to_send)
+                else:
+                    udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
+                
+                # --- #
+                # LOG #
+                # --- #
+                ser_pac_to_send_info.set_timestamp(time.time_ns())
+                #for logging
+                id_pac_to_send = ser_pac_to_send_info.get_pac_id()
+                trans_pac_to_send = ser_pac_to_send_info.get_transmissions()       
+                log_trans_drone(id_pac_to_send, "DAT", "s", trans_pac_to_send, q4.qsize(), my_packet_info_dict.size(), q_log)
+                
+                if prog_mode != 0:
+                    print(f"SP: PACKET {ser_pac_to_send_info.pac_id} RESENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-                except serial.SerialException as e:
-                    print(f"Failed to send packet: {e}")
+                    pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<IffIhhq', ser_pac_to_send[:-4])
+                    sent_packet = Packet(
+                        pac_id=pac_id,
+                        gps_data=[lat, lon],
+                        alt=alt,
+                        high_temp=high_temp,
+                        low_temp=low_temp,
+                        time_stamp=time_stamp
+                    )
+                    print(sent_packet)
+                
+                # ---------------- #
+                # HANDSHAKE METHOD #
+                # ---------------- #
+                my_packet_info_dict.add(ser_pac_to_send_info)
+                if prog_mode != 0:
+                    print(f"SP: PACKET {ser_pac_to_send_info.pac_id} PUT ON PACKET_INFO_DICT")
+
+            except serial.SerialException as e:
+                print(f"Failed to send packet: {e}")
 
 
         # Send packets if available and resend_priority is insufficient (as compared to random float)
@@ -330,13 +332,7 @@ def send_packet(q4, my_packet_info_dict, prog_mode, rf_serial, log_radio_listene
                 # --- #
                 # LOG #
                 # --- #
-                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                trans_type = None
-                if prog_mode != 2:
-                    trans_type = 'RF'
-                else:
-                    trans_type = 'UDP'
-                log_radio_listener.put({"timestamp": timestamp, "packet_id": id_pac_to_send, "send(s)/receive(r)": 's', "trans_type": trans_type,  "num_transmissions": trans_pac_to_send, "unsent_pac_queue_size": q4.qsize(), "unacked_pac_queue_size": my_packet_info_dict.size()})
+                log_trans_drone(id_pac_to_send, "DAT", "s", trans_pac_to_send, q4.qsize(), my_packet_info_dict.size(), q_log)
                 
                 
             except serial.SerialException as e:
@@ -422,7 +418,7 @@ def transmit_packet(ser_pac_to_send_info, q_unack_pac_info, udp_socket):
 #   Return: None                                                       #
 ########################################################################
 # ONLY NEED Q4 AS AN ARGUMENT B/C LOGGER NEEDS TO BE REENCAPSULATED
-def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port, q4, log_radio_listener):
+def receive_and_decode(my_packet_info_dict, prog_mode, q4, q_log):
     # UDP socket debug mode (local)
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -435,7 +431,7 @@ def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port, q4, l
     else:
         try:
             # Open the serial port connected to the RF module
-            print(f"RD: Listening for packets on /dev/ttyUSB{rf_serial_usb_port}...")
+            print(f"RD: Listening for packets on /dev/ttyUSB{rf_serial}...")
         except serial.SerialException as e:
             print(f"RD: Error opening serial port: {e}")
             return
@@ -492,13 +488,8 @@ def receive_and_decode(my_packet_info_dict, prog_mode, rf_serial_usb_port, q4, l
             # --- #
             # LOG #
             # --- #
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-            trans_type = None
-            if prog_mode != 2:
-                trans_type = 'RF'
-            else:
-                trans_type = 'UDP'
-            log_radio_listener.put({"timestamp": timestamp, "packet_id": pac_id, "send(s)/receive(r)": 'r', "trans_type": trans_type,  "num_transmissions": '', "unsent_pac_queue_size": q4.qsize(), "unacked_pac_queue_size": my_packet_info_dict.size()})
+            log_trans_drone(pac_id, "ACK", "r", 1, q4.qsize(), my_packet_info_dict.size(), q_log)
+                    
 
         except struct.error as e:
             print(f"RD: Error decoding packet: {e}")
@@ -532,9 +523,9 @@ def setup_csv_logger(csv_file):
     """Ensure CSV file has headers."""
     with open(csv_file, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["timestamp", "packet_id", "send(s)/receive(r)", "trans_type", "num_transmissions", "unsent_pac_queue_size", "unacked_pac_queue_size"])  # Define CSV headers
+        writer.writerow(["timestamp", "packet_id", "pac_type", "send(s)/receive(r)", "trans_type", "num_transmissions", "unsent_pac_queue_size", "unacked_pac_queue_size"])  # Define CSV headers
 
-def radio_log_listener(log_queue, csv_file):
+def radio_log_listener(q_log, csv_file):
     """Process that listens for logs and writes them to CSV."""
     setup_csv_logger(csv_file)
     
@@ -543,15 +534,30 @@ def radio_log_listener(log_queue, csv_file):
         
         while True:
             try:
-                record = log_queue.get()
+                record = q_log.get()
                 if record is None:
                     break  # Stop listener when None is received
                 
-                writer.writerow([record["timestamp"], record["packet_id"], record["send(s)/receive(r)"], record["trans_type"], record["num_transmissions"], record["unsent_pac_queue_size"], record["unacked_pac_queue_size"]])
+                writer.writerow([record["timestamp"], record["packet_id"], record["pac_type"], record["send(s)/receive(r)"], record["trans_type"], record["num_transmissions"], record["unsent_pac_queue_size"], record["unacked_pac_queue_size"]])
                 file.flush()  # Flush immediately to prevent data loss
             
             except Exception as e:
                 print("Logging error:", e)
+
+def log_trans_drone(pac_id, pac_type, send_or_recieve, num_transmissions, unsent_pac_queue_size, unacked_pac_queue_size, q_log):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # --- #
+    # LOG #
+    # --- #
+    # Could be fixed for differenting between timestamps for sent ACKs and received DATs
+    trans_type = None
+    if prog_mode != 2:
+        trans_type = 'RF'
+    else:
+        trans_type = 'UDP'
+    q_log.put({"timestamp": timestamp, "pac_type": pac_type, "packet_id": pac_id, "send(s)/receive(r)": send_or_recieve, "pac_type": pac_type, "trans_type": trans_type,  "num_transmissions": num_transmissions, "unsent_pac_queue_size": unsent_pac_queue_size, "unacked_pac_queue_size": unacked_pac_queue_size})
+
 
 
 
@@ -581,7 +587,6 @@ if __name__ == '__main__':
                                     # 'forkserver' : good compromise of 'spawn' and 'fork' (only compatible with unix-based systems)
 
     prog_mode = 0
-    rf_serial = None
     my_packet_info_dict = Packet_Info_Dict()
 
     parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
@@ -589,8 +594,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.mode is not None:  # Avoid overwriting if mode isn't provided
         prog_mode = args.mode
-    if prog_mode != 2:
-        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 
     if prog_mode != 0:
         print(f"RUNNING IN PROG MODE: {prog_mode}")
@@ -599,15 +602,11 @@ if __name__ == '__main__':
     pid = os.getpid()
     os.sched_setaffinity(pid, {0})
     
-    # Thermal Camera Settings
-    PRINT_TEMPERATURES = True
-    PRINT_ASCIIART = False
-    
     # Set parameters to communicate with thermal camera
     if prog_mode != 0:
         print("TEST_MAIN 2")
     if prog_mode != 2:
-        rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+        rf_serial = serial.Serial(port=RF_TRANCIEVER_PORT, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
         i2c = busio.I2C(board.SCL, board.SDA, frequency=800000)
     # i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
     
@@ -648,7 +647,7 @@ if __name__ == '__main__':
         q3 = mp.Queue()
         q4 = mp.Queue()
         q5 = mp.Queue() # simulation queue
-        q_log_queue = mp.Queue() # queue for storing logs
+        q_log = mp.Queue() # queue for storing logs
 
         # Initialize threads for processing and transmitting radio data
         if prog_mode != 0:
@@ -656,10 +655,10 @@ if __name__ == '__main__':
         p1 = mp.Process(target=data_structure_builder, args=(q1,q2,q5,))
         p2 = mp.Process(target=data_processing, args=(q2,q3,))
         p3 = mp.Process(target=create_packet, args=(q3,q4,))
-        p4 = mp.Process(target=send_packet, args=(q4,my_packet_info_dict,prog_mode,rf_serial,q_log_queue,))
+        p4 = mp.Process(target=send_packet, args=(q4,my_packet_info_dict,prog_mode,q_log,))
         p5 = mp.Process(target=gps_sim, args=(q5,)) # sim flight queue
-        p_recieve_packets = mp.Process(target=receive_and_decode, args=(my_packet_info_dict,prog_mode,rf_serial,q4,q_log_queue,))
-        p_logger_radio = mp.Process(target=radio_log_listener, args=(q_log_queue, get_flight_log_filename()))
+        p_recieve_packets = mp.Process(target=receive_and_decode, args=(my_packet_info_dict,prog_mode,q4,q_log,))
+        p_logger_radio = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename()))
 
         # Start threads
         if prog_mode != 0:

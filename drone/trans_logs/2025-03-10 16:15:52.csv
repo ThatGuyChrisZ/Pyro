@@ -1,6 +1,0 @@
-timestamp,packet_id,send(s)/receive(r),trans_type,num_transmissions,unsent_pac_queue_size,unacked_pac_queue_size
-2025-03-10 16:15:55,1,s,UDP,1,87,1
-2025-03-10 16:15:57,2,s,UDP,1,3833,2
-2025-03-10 16:15:59,3,s,UDP,1,7105,2
-2025-03-10 16:16:01,4,s,UDP,1,11303,3
-2025-03-10 16:16:03,5,s,UDP,1,15215,4

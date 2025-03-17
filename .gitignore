@@ -1,2 +1,6 @@
 
 drone/myenv/
+
+gcs/trans_logs/
+
+drone/trans_logs/
