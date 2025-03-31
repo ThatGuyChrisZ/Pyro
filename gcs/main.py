@@ -81,7 +81,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
                 print(f"Received packet from {addr}")
             # Read the serialized data from the RF module
             else:
-                rf_serial = serial.Serial(port='/dev/ttyUSB'+rf_serial_usb_port, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+                rf_serial = serial.Serial(port='COM'+ rf_serial_usb_port, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
                 data = rf_serial.read(PACKET_SIZE)
 
             if prog_mode != 0:
