@@ -11,6 +11,7 @@ import socket # For UDP socket transmission in MODE 2
 import requests
 import argparse
 from packet_class._v4.packet import Packet
+from database import process_packet
 
 PACKET_SIZE = 32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
@@ -28,24 +29,39 @@ UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 ########################################################################
 def send_packet_to_server(packet):
     """Sends the decoded packet to the server."""
-    server_url = "http://localhost:8000/add_packet"  # Current Server Location
-    try:
-        packet_data = {
-            "pac_id": packet.pac_id,
-            "gps_data": packet.gps_data,
-            "alt": packet.alt,
-            "high_temp": packet.high_temp,
-            "low_temp": packet.low_temp,
-            "time_stamp": packet.time_stamp
-        }
 
-        response = requests.post(server_url, json=packet_data)
-        if response.status_code == 200:
-            print("Packet successfully sent to server.")
-        else:
-            print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
-    except requests.RequestException as e:
-        print(f"Error connecting to the server: {e}")
+    name = "Fire Name"
+    flight_id = -1
+
+    packet_data = {
+        "pac_id": packet.pac_id,
+        "gps_data": packet.gps_data,
+        "alt": packet.alt,
+        "high_temp": packet.high_temp,
+        "low_temp": packet.low_temp,
+        "time_stamp": packet.time_stamp
+    }
+
+    process_packet(packet_data, name, flight_id, "pending")
+
+    ## Old Implementation 
+    # server_url = "http://localhost:8000/add_packet"  # Current Server Location
+    # try:
+    #     packet_data = {
+    #         "pac_id": packet.pac_id,
+    #         "gps_data": packet.gps_data,
+    #         "alt": packet.alt,
+    #         "high_temp": packet.high_temp,
+    #         "low_temp": packet.low_temp,
+    #         "time_stamp": packet.time_stamp
+    #     }
+    #     response = requests.post(server_url, json=packet_data)
+    #     if response.status_code == 200:
+    #         print("Packet successfully sent to server.")
+    #     else:
+    #         print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
+    # except requests.RequestException as e:
+    #     print(f"Error connecting to the server: {e}")
 
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #

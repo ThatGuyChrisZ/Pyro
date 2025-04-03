@@ -45,7 +45,8 @@ def init_db():
             sync_status TEXT DEFAULT 'pending', 
             time_stamp REAL,
             heading REAL,
-            speed REAL
+            speed REAL,
+            flight_id INTEGER NOT NULL DEFAULT -1,
         )
         """
     )
@@ -103,7 +104,8 @@ def sync_to_firebase():
             "sync_status": row[11],
             "time_stamp": row[12],
             "heading": row[13],
-            "speed": row[14]
+            "speed": row[14],
+            "flight_id": row[15]
         }
 
         # Add to batch only if it doesn't already exist in Firebase
@@ -124,7 +126,7 @@ def sync_to_firebase():
 
     conn.close()
 
-def process_packet(packet, name, status="active"):
+def process_packet(packet, name, flight_id, status="active"):
     try:
         pac_id = packet.get("pac_id", -1)
         gps_data = packet.get("gps_data", [0.0, 0.0])
@@ -159,12 +161,12 @@ def process_packet(packet, name, status="active"):
             INSERT INTO wildfires (
                 name, pac_id, latitude, longitude, alt, high_temp, low_temp, 
                 status, date_received, time_received, sync_status, time_stamp,
-                heading, speed
+                heading, speed, flight_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status,
-             date_received, time_received, "pending", time_stamp, heading, speed)
+             date_received, time_received, "pending", time_stamp, heading, speed, flight_id)
         )
 
         conn.commit()
