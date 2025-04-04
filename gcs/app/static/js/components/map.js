@@ -1,6 +1,6 @@
 // Fire icon
 const wildfireIcon = L.icon({
-    iconUrl: 'wildfire-icon.webp',
+    iconUrl: 'app/static/assets/wildfire-icon.webp',
     iconSize: [40, 40],
     iconAnchor: [20, 40],
     popupAnchor: [0, -40],

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Fire Details{% end %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+<style>
+  #map {
+    height: 600px;
+    width: 100%;
+    border-radius: 6px;
+    margin-top: 15px;
+  }
+  .legend {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: white;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+    font-size: 14px;
+    line-height: 1.5;
+    z-index: 1001;
+  }
+  .legend .color-bar {
+    height: 10px;
+    margin: 5px 0;
+    background: linear-gradient(to right, blue, lime, yellow, orange, red);
+  }
+  .map-container {
+    position: relative;
+  }
+  #weather-sidebar {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 300px;
+    background-color: #f9f9f9;
+    border-left: 1px solid #ccc;
+    box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    z-index: 1000;
+    font-family: Arial, sans-serif;
+  }
+  #weather-sidebar h2 {
+    font-size: 18px;
+    margin: 0 0 10px;
+  }
+  #weather-sidebar p {
+    margin: 5px 0;
+  }
+  .weather-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .weather-info {
+    flex: 1;
+    margin-right: 10px;
+  }
+  #weather-image {
+    max-width: 100px;
+    max-height: 100px;
+    border-radius: 8px;
+    display: none;
+  }
+  #timeline-container {
+    margin-top: 30px;
+  }
+</style>
+{% end %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 id="fire-title" class="text-center">Fire Details</h2>
+
+  <div class="map-container">
+    <div id="map"></div>
+    <div class="legend">
+      <strong>Temperature Key (°C):</strong>
+      <div class="color-bar"></div>
+      <div class="d-flex justify-content-between">
+        <span id="low-temp">Low</span>
+        <span id="high-temp">High</span>
+      </div>
+    </div>
+
+    <div id="weather-sidebar">
+      <h2>Current Weather</h2>
+      <div class="weather-content">
+        <div class="weather-info">
+          <p id="weather-description">Loading...</p>
+          <p><strong>Temperature:</strong> <span id="weather-temperature">-</span>°C</p>
+          <p><strong>Humidity:</strong> <span id="weather-humidity">-</span>%</p>
+          <p><strong>Wind Speed:</strong> <span id="weather-wind">-</span> m/s</p>
+        </div>
+        <img id="weather-image" alt="Weather image">
+      </div>
+      <button id="refresh-weather">Refresh Weather</button>
+    </div>
+  </div>
+
+  <div id="timeline-container"></div>
+</div>
+{% end %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+<script type="module" src="{{ static_url('js/components/fire_details_script.js') }}"></script>
+<script type="module" src="{{ static_url('js/components/weather_script.js') }}"></script>
+<script type="module" src="{{ static_url('js/components/timeline.js') }}"></script>
+{% end %}

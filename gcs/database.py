@@ -21,7 +21,6 @@ if not firebase_admin._apps:
 firebase_ref = db.reference("wildfires")
 
 def init_db():
-    """Initialize the local SQLite database with WAL mode and new sync_status column."""
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
     
@@ -46,7 +45,7 @@ def init_db():
             time_stamp REAL,
             heading REAL,
             speed REAL,
-            flight_id INTEGER NOT NULL DEFAULT -1,
+            flight_id INTEGER NOT NULL DEFAULT -1
         )
         """
     )
@@ -134,7 +133,7 @@ def process_packet(packet, name, flight_id, status="active"):
         alt = packet.get("alt", 0.0)
         high_temp = packet.get("high_temp", 0.0)
         low_temp = packet.get("low_temp", 0.0)
-        time_stamp = packet.get("time_stamp", 0.0)
+        time_stamp = packet.get("time_stamp", time.time_ns())
         heading = 0
         speed = 0
 
@@ -240,7 +239,7 @@ def fetch_heatmap_data(name: str, date: Optional[str] = None, time: Optional[str
     conn = sqlite3.connect('wildfire_data.db')
     cursor = conn.cursor()
     query = '''
-        SELECT latitude, longitude, high_temp, low_temp 
+        SELECT latitude, longitude, high_temp, low_temp, date_received, time_received, time_stamp, alt
         FROM wildfires 
         WHERE name = ?
     '''
@@ -257,7 +256,7 @@ def fetch_heatmap_data(name: str, date: Optional[str] = None, time: Optional[str
     results = cursor.fetchall()
     conn.close()
     return [
-        {"latitude": row[0], "longitude": row[1], "high_temp": row[2], "low_temp": row[3]}
+        {"latitude": row[0], "longitude": row[1], "high_temp": row[2], "low_temp": row[3], "date_received": row[4], "time_received": row[5], "time_stamp": row[6], "altitude": row[7]}
         for row in results
     ]
 
@@ -265,21 +264,15 @@ def fetch_all_heatmap_data() -> List[dict]:
     conn = sqlite3.connect('wildfire_data.db')
     cursor = conn.cursor()
     query = '''
-        SELECT latitude, longitude, high_temp, low_temp, date_received, time_received 
+        SELECT latitude, longitude, high_temp, low_temp, date_received, time_received, alt
         FROM wildfires
     '''
     cursor.execute(query)
     results = cursor.fetchall()
     conn.close()
     return [
-        {
-            "latitude": row[0],
-            "longitude": row[1],
-            "high_temp": row[2],
-            "low_temp": row[3],
-            "date_received": row[4],
-            "time_received": row[5]
-        } for row in results
+        {"latitude": row[0], "longitude": row[1], "high_temp": row[2], "low_temp": row[3], "date_received": row[4], "time_received": row[5], "time_stamp": row[6], "altitude": row[7]}
+        for row in results
     ]
 
 # Wildfire Status Db
@@ -438,4 +431,18 @@ def update_mission_data(export):
     finally:
         conn.close()
 
-    
+# Flight_id / Ulog Database
+def init_flights_db():
+    conn = sqlite3.connect("wildfire_data.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS flights (
+            flight_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ulog_filename TEXT NOT NULL UNIQUE,
+            time_started REAL
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
