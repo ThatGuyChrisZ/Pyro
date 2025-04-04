@@ -3,7 +3,14 @@ import time
 import json
 import sqlite3
 import multiprocessing as mp
+from multiprocessing import Manager
 from database import init_db, process_packet, sync_to_firebase, update_mission_data
+
+# User can select fire name in drone operator UI
+# Flight id can come from the flight controller when new flight has started
+config = Manager().dict()
+config["fire_name"] = "Unnamed Fire"
+config["flight_id"] = None 
 
 # This function is referenced but not directly used in our current backend.
 def recursive_listen(QGroundControl):

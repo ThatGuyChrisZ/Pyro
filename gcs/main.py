@@ -12,6 +12,7 @@ import requests
 import argparse
 from packet_class._v4.packet import Packet
 from database import process_packet
+from backend_server import config
 
 PACKET_SIZE = 32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
@@ -27,11 +28,10 @@ UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 #   Description:                                                       #
 #   Return:                                                            #
 ########################################################################
-def send_packet_to_server(packet):
+def send_packet_to_server(packet, config):
     """Sends the decoded packet to the server."""
-
-    name = "Fire Name"
-    flight_id = -1
+    name = config.get("fire_name", "Unnamed Fire")
+    flight_id = config.get("flight_id", -1)
 
     packet_data = {
         "pac_id": packet.pac_id,
@@ -146,7 +146,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
             # Print the decoded packet and send to the server
             if prog_mode != 0:
                 print(packet)
-            send_packet_to_server(packet)
+            send_packet_to_server(packet, config)
             if prog_mode != 0:
                 print(f"RD: sent ACK packet for ID {packet.pac_id}")
             print(f"ACK packet length: {len(ack_serialized_data)}")
