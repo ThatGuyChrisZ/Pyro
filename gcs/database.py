@@ -51,6 +51,7 @@ def init_db():
     )
     
     init_wildfire_status_db()
+    init_flights_db()
     conn.commit()
     conn.close()
 
@@ -172,6 +173,7 @@ def process_packet(packet, name, flight_id, status="active"):
         conn.close()
 
         update_fire_status(name, latitude, longitude, high_temp, low_temp, alt)
+        update_flights(flight_id, "ulog_filename")
 
         # Run Firebase sync in a parallel thread
         #sync_thread = Thread(target=sync_to_firebase)
@@ -446,3 +448,25 @@ def init_flights_db():
     )
     conn.commit()
     conn.close()
+
+import time
+import sqlite3
+
+def update_flights(flight_id, ulog_filename):
+    conn = sqlite3.connect("wildfire_data.db")
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM flights WHERE flight_id = ?", (flight_id,))
+    count = cursor.fetchone()[0]
+
+    if count == 0:
+        # Insert new flight with current timestamp
+        time_started = time.time_ns()
+        cursor.execute(
+            """
+            INSERT INTO flights (flight_id, ulog_filename, time_started)
+            VALUES (?, ?, ?)
+            """,
+            (flight_id, ulog_filename, time_started)
+        )
+        conn.commit()
