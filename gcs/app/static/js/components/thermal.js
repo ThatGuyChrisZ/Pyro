@@ -4,6 +4,7 @@ class ThermalOverlay {
       this.heatLayer = null;
       this.thermalData = [];
       this.colorGradient = {
+        0.0: "rgba(0, 0, 255, 0)",
         0.4: 'blue',
         0.6: 'lime',
         0.7: 'yellow',
@@ -91,6 +92,7 @@ class ThermalOverlay {
       switch(mode) {
         case 'standard':
           this.colorGradient = {
+            0.0: 'rgba(0, 0, 255, 0)',
             0.4: 'blue',
             0.6: 'lime',
             0.7: 'yellow',

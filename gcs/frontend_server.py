@@ -312,8 +312,10 @@ class FlightDataHandler(BaseHandler):
                 query = """
                     SELECT 
                         flight_id,
+                        name, 
                         ulog_filename,
-                        time_started
+                        time_started,
+                        time_ended
                     FROM flights
                     WHERE flight_id = ?
                 """
@@ -351,8 +353,10 @@ class FlightDataHandler(BaseHandler):
                 query = """
                     SELECT 
                         flight_id,
+                        name, 
                         ulog_filename,
-                        time_started
+                        time_started,
+                        time_ended
                     FROM flights
                     WHERE 1=1
                 """
@@ -384,7 +388,6 @@ class LiveDataWebSocketHandler(tornado.websocket.WebSocketHandler):
     connections = set()
     
     def check_origin(self, origin):
-        # Allow WebSocket connections from any origin
         return True
     
     def open(self):
@@ -455,7 +458,7 @@ def import_packets_from_file(file_path):
                 try:
                     packet_data = json.loads(line.strip())
                     name = packet_data.get("name", "Unnamed Fire")
-                    process_packet(packet_data, name, 1, "active")
+                    process_packet(packet_data, name, 2, "active")
                 except json.JSONDecodeError as e:
                     print(f"Error decoding packet: {e}")
                 except Exception as e:

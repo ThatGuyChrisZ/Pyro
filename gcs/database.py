@@ -173,7 +173,7 @@ def process_packet(packet, name, flight_id, status="active"):
         conn.close()
 
         update_fire_status(name, latitude, longitude, high_temp, low_temp, alt)
-        update_flights(flight_id, "ulog_filename")
+        update_flights(flight_id, name, "ulog_filename")
 
         # Run Firebase sync in a parallel thread
         #sync_thread = Thread(target=sync_to_firebase)
@@ -441,8 +441,10 @@ def init_flights_db():
         """
         CREATE TABLE IF NOT EXISTS flights (
             flight_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ulog_filename TEXT NOT NULL UNIQUE,
-            time_started REAL
+            name TEXT,
+            ulog_filename TEXT,
+            time_started REAL,
+            time_ended
         )
         """
     )
@@ -452,7 +454,7 @@ def init_flights_db():
 import time
 import sqlite3
 
-def update_flights(flight_id, ulog_filename):
+def update_flights(flight_id, name, ulog_filename):
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
@@ -464,9 +466,20 @@ def update_flights(flight_id, ulog_filename):
         time_started = time.time_ns()
         cursor.execute(
             """
-            INSERT INTO flights (flight_id, ulog_filename, time_started)
-            VALUES (?, ?, ?)
+            INSERT INTO flights (flight_id, name, ulog_filename, time_started, time_ended)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (flight_id, ulog_filename, time_started)
+            (flight_id, name, ulog_filename, time_started, time_started)
         )
         conn.commit()
+    else:
+        cursor.execute(
+            """
+            UPDATE flights
+            SET time_ended = ?
+            WHERE flight_id = ?
+            """,
+            (time.time_ns(), flight_id)
+        )
+        conn.commit()
+        conn.close()

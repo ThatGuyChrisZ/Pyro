@@ -72,6 +72,11 @@ class TimelineController {
     
     async loadData(name) {
         try {
+          const flightResponse = await fetch(`/api/flights?name=${name}`);
+          const flightData = await flightResponse.json();
+
+          this.flights = flightData
+
           const thermalResponse = await fetch(`/api/thermal/${name}`);
           const thermalRaw = await thermalResponse.json();
       
@@ -114,15 +119,13 @@ class TimelineController {
           return {
             startTime: this.startTime,
             endTime: this.endTime,
-            thermalReadings: this.thermalReadings
+            thermalReadings: this.thermalReadings,
+            flights: this.flights
           };
         } catch (error) {
           console.error("Error loading timeline data:", error);
         }
-      }
-      
-      
-      
+    }
     
     render() {
       if (!this.startTime || !this.endTime) return;
@@ -179,11 +182,11 @@ class TimelineController {
           .enter()
           .append('rect')
           .attr('class', 'flight-bar')
-          .attr('x', d => this.timeScale(new Date(d.startTime)))
+          .attr('x', d => this.timeScale(new Date(d.time_started / 1_000_000)))
           .attr('y', this.options.height / 2 - this.options.padding / 2 - 4)
           .attr('width', d => {
-            const start = this.timeScale(new Date(d.startTime));
-            const end = this.timeScale(new Date(d.endTime));
+            const start = this.timeScale(new Date(d.time_started / 1_000_000));
+            const end = this.timeScale(new Date(d.time_ended / 1_000_000));
             return Math.max(end - start, 4); // Minimum width of 4px
           })
           .attr('height', 8)
