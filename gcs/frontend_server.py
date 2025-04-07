@@ -74,22 +74,27 @@ class WildfireMarkersHandler(BaseHandler):
 
         query = """
             SELECT 
-                name,
-                AVG(latitude) AS avg_latitude,
-                AVG(longitude) AS avg_longitude,
-                MAX(high_temp) AS high_temp,
-                MIN(low_temp) AS low_temp,
-                MAX(date_received) AS last_date_received,
-                MAX(time_received) AS last_time_received,
-                MAX(status) AS status,
-                MAX(alt) AS alt,
-                MAX(heading) AS heading,
-                MAX(speed) AS speed,
-                MAX(flight_id) AS flight_id,
-                MAX(time_stamp) AS last_updated,
-                COUNT(*) AS point_count
-            FROM wildfires
-            WHERE 1=1
+                ws.id,
+                ws.name, 
+                ws.location,
+                ws.size,
+                ws.intensity,
+                ws.alt_avg,
+                ws.status,
+                ws.max_temp,
+                ws.min_temp,
+                ws.avg_latitude,
+                ws.avg_longitude,
+                ws.flights,
+                ws.num_data_points,
+                ws.first_time_stamp, 
+                ws.time_stamp,
+                ws.last_flight_id
+            FROM wildfire_status ws
+            JOIN (
+                SELECT name, MAX(time_stamp) AS max_time_stamp
+                FROM wildfire_status
+                WHERE 1=1
         """
 
         if filter_type == "active":
@@ -97,7 +102,11 @@ class WildfireMarkersHandler(BaseHandler):
         elif filter_type == "archived":
             query += " AND status = 'archived'"
 
-        query += " GROUP BY name ORDER BY last_updated DESC"
+        query += """
+                GROUP BY name
+            ) latest ON ws.name = latest.name AND ws.time_stamp = latest.max_time_stamp
+            ORDER BY ws.time_stamp DESC
+        """
 
         cursor.execute(query)
         fires = [dict(row) for row in cursor.fetchall()]
@@ -109,17 +118,43 @@ class DatabaseQueryHandler(BaseHandler):
     def get(self):
         try:
             fire_name = self.get_argument("fire_name", None)
-            table = self.get_argument("table", "wildfire_status")  # default to status view
+            table = self.get_argument("table", "wildfire_status")
             conn = sqlite3.connect(options.db_path)
 
-            if fire_name and table == "wildfires":
-                query = "SELECT * FROM wildfires WHERE name = ?"
-                df = pd.read_sql_query(query, conn, params=(fire_name,))
-            else:
-                if table not in ["wildfire_status", "wildfires"]:
-                    raise ValueError("Invalid table name")
-                query = f"SELECT * FROM {table}"
-                df = pd.read_sql_query(query, conn)
+            if table not in ["wildfire_status", "wildfires"]:
+                raise ValueError("Invalid table name")
+                
+            if table == "wildfire_status":
+                if fire_name:
+                    # Return only the most recent record for the specified fire
+                    query = """
+                        SELECT *
+                        FROM wildfire_status
+                        WHERE name = ?
+                        ORDER BY time_stamp DESC
+                        LIMIT 1
+                    """
+                    df = pd.read_sql_query(query, conn, params=(fire_name,))
+                else:
+                    # Return only the most recent record for each fire name.
+                    query = """
+                        SELECT t.*
+                        FROM wildfire_status t
+                        JOIN (
+                            SELECT name, MAX(time_stamp) as max_time_stamp
+                            FROM wildfire_status
+                            GROUP BY name
+                        ) latest
+                        ON t.name = latest.name AND t.time_stamp = latest.max_time_stamp
+                    """
+                    df = pd.read_sql_query(query, conn)
+            elif table == "wildfires":
+                if fire_name:
+                    query = "SELECT * FROM wildfires WHERE name = ?"
+                    df = pd.read_sql_query(query, conn, params=(fire_name,))
+                else:
+                    query = "SELECT * FROM wildfires"
+                    df = pd.read_sql_query(query, conn)
 
             conn.close()
             data = df.to_dict(orient="records")
@@ -129,7 +164,7 @@ class DatabaseQueryHandler(BaseHandler):
 
         except Exception as e:
             self.set_status(500)
-            self.write({"error": str(e)})
+            self.write(json.dumps({"error": str(e)}))
 
 class DownloadCSVHandler(BaseHandler):
     def get(self):
@@ -153,7 +188,6 @@ class DownloadCSVHandler(BaseHandler):
 
 class FirebaseSyncHandler(BaseHandler):
     def get(self):
-        # Manually trigger Firebase sync for any pending data
         sync_to_firebase()
         self.set_header("Content-Type", "application/json")
         self.write({"message": "Firebase sync initiated."})
@@ -253,8 +287,6 @@ class FireDataHandler(BaseHandler):
             self.set_status(500)
             self.write({"error": "Failed to fetch fire data"})
 
-from datetime import datetime
-
 class ThermalDataHandler(BaseHandler):
     def get(self, name):
         try:
@@ -325,7 +357,7 @@ class FlightDataHandler(BaseHandler):
                 if flight_data:
                     flight = dict(flight_data)
                     
-                    # Get associated wildfire data for this flight
+                    # Get associated wildfire data for a flight
                     path_query = """
                         SELECT 
                             id,
@@ -349,7 +381,7 @@ class FlightDataHandler(BaseHandler):
                     self.set_status(404)
                     self.write({"error": "Flight not found"})
             else:
-                # Get list of all flights, possibly filtered
+                # Get list of all flights
                 query = """
                     SELECT 
                         flight_id,
@@ -409,6 +441,50 @@ class LiveDataWebSocketHandler(tornado.websocket.WebSocketHandler):
 class FireDetailsHandler(BaseHandler):
     def get(self):
         self.render("fire_details.html")
+
+class FireComparisonHandler(BaseHandler):
+    def get(self):
+        fire_name = self.get_argument("name")
+        cursor = self.db.cursor()
+
+        current_query = """
+            SELECT size, intensity, time_stamp
+            FROM wildfire_status
+            WHERE name = ?
+            ORDER BY time_stamp DESC
+            LIMIT 1
+        """
+        cursor.execute(current_query, (fire_name,))
+        current_record = cursor.fetchone()
+        if not current_record:
+            self.set_status(404)
+            self.write(json.dumps({"error": "Fire not found"}))
+            return
+
+        current_timestamp = current_record["time_stamp"]
+
+        # Previous Entry in Wildfire Status
+        comparison_query = """
+            SELECT size, intensity, time_stamp
+            FROM wildfire_status
+            WHERE name = ? AND time_stamp < ?
+            ORDER BY time_stamp DESC
+            LIMIT 1
+        """
+        cursor.execute(comparison_query, (fire_name, current_timestamp))
+        comparison_record = cursor.fetchone()
+
+        if comparison_record:
+            result = {
+                "prev_size": comparison_record["size"],
+                "prev_intensity": comparison_record["intensity"],
+                "prev_timestamp": comparison_record["time_stamp"]
+            }
+        else:
+            result = {} 
+
+        self.set_header("Content-Type", "application/json")
+        self.write(json.dumps(result))
         
 class TestHandler(BaseHandler):
     def get(self):
@@ -434,6 +510,7 @@ def make_app():
         (r"/download_csv", DownloadCSVHandler),
         (r"/sync_firebase", FirebaseSyncHandler),
         (r"/add_packet", AddPacketHandler),
+        (r"/fire_comparison", FireComparisonHandler),
         (r"/test", TestHandler),
         (r"/api/fires", FireDataHandler),
         (r"/api/thermal/([^/]+)", ThermalDataHandler),

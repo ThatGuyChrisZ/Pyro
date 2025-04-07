@@ -1,6 +1,6 @@
 import sqlite3
 from typing import List, Tuple, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import requests
 import math
@@ -128,13 +128,14 @@ def sync_to_firebase():
 
 def process_packet(packet, name, flight_id, status="active"):
     try:
+        ns24h = 24 * 60 * 60 * 1_000_000_000 
         pac_id = packet.get("pac_id", -1)
         gps_data = packet.get("gps_data", [0.0, 0.0])
         latitude, longitude = gps_data[0], gps_data[1]
         alt = packet.get("alt", 0.0)
         high_temp = packet.get("high_temp", 0.0)
         low_temp = packet.get("low_temp", 0.0)
-        time_stamp = packet.get("time_stamp", time.time_ns())
+        time_stamp = packet.get("time_stamp", time.time_ns() - (1/4) * ns24h)
         heading = 0
         speed = 0
 
@@ -172,7 +173,8 @@ def process_packet(packet, name, flight_id, status="active"):
         conn.commit()
         conn.close()
 
-        update_fire_status(name, latitude, longitude, high_temp, low_temp, alt)
+        process_new_flight(name, flight_id)
+        # update_fire_status(name)
         update_flights(flight_id, name, "ulog_filename")
 
         # Run Firebase sync in a parallel thread
@@ -278,6 +280,8 @@ def fetch_all_heatmap_data() -> List[dict]:
     ]
 
 # Wildfire Status Db
+MIN_TEMP_THRESHOLD = 200
+
 def init_wildfire_status_db():
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
@@ -285,100 +289,134 @@ def init_wildfire_status_db():
         """
         CREATE TABLE IF NOT EXISTS wildfire_status (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
+            name TEXT, 
             location TEXT,
             size REAL DEFAULT 0.0,
             intensity REAL DEFAULT 0.0,
             alt_avg REAL DEFAULT 0.0,
-            num_data_points INTEGER DEFAULT 0,
             status TEXT DEFAULT 'active',
             max_temp REAL DEFAULT 0.0,
             min_temp REAL DEFAULT 0.0,
-            lat_range REAL DEFAULT 0.0,
-            lon_range REAL DEFAULT 0.0,
             avg_latitude REAL DEFAULT 0.0,
             avg_longitude REAL DEFAULT 0.0,
-            first_date_received STRING,
-            first_time_received STRING,
-            last_updated STRING
-        )
+            flights REAL DEFAULT 0.0,
+            num_data_points REAL DEFAULT 0.0,
+            first_time_stamp REAL, 
+            time_stamp REAL,
+            last_flight_id INTEGER DEFAULT NULL
+        );
         """
     )
     conn.commit()
     conn.close()
 
-def update_fire_status(name: str, latitude: float, longitude: float, high_temp: float, low_temp: float, altitude: float):
+# Each record represents an data aggregate update from the past 24 hours
+def update_fire_status(name: str):
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM wildfire_status WHERE name = ?", (name,))
-    fire = cursor.fetchone()
+    now = time.time_ns()
+    ns24h = 24 * 60 * 60 * 1_000_000_000 
+    window_start = now - ns24h
 
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Data from the past 24 hours
+    cursor.execute(
+        """
+        SELECT latitude, longitude, high_temp, low_temp, alt, flight_id, time_stamp 
+        FROM wildfires 
+        WHERE name = ? AND time_stamp >= ? AND high_temp >= ?
+        """,
+        (name, window_start, MIN_TEMP_THRESHOLD)
+    )
+    rows = cursor.fetchall()
+    if not rows:
+        print(f"No recent data for fire {name} meeting the threshold.")
+        conn.close()
+        return
+
+    latitudes = []
+    longitudes = []
+    intensities = []
+    altitudes = []
+    high_temps = []
+    low_temps = []
+    flight_ids = set()
+    timestamps = []
+
+    for row in rows:
+        lat, lon, high_temp, low_temp, alt, flight_id, ts = row
+        latitudes.append(lat)
+        longitudes.append(lon)
+        intensities.append((high_temp + low_temp) / 2)
+        altitudes.append(alt)
+        high_temps.append(high_temp)
+        low_temps.append(low_temp)
+        flight_ids.add(flight_id)
+        timestamps.append(ts)
+
+    num_points = len(intensities)
+    new_intensity = sum(intensities) / num_points
+    new_alt_avg = sum(altitudes) / num_points
+    new_avg_lat = sum(latitudes) / num_points
+    new_avg_lon = sum(longitudes) / num_points
+    new_max_temp = max(high_temps)
+    new_min_temp = min(low_temps)
+    new_flights = len(flight_ids)
+    new_first_time_stamp = min(timestamps)
+    new_time_stamp = max(timestamps)
+    new_last_flight_id = max(flight_ids)
+
+    # Size Calculation
+    max_lat = max(latitudes)
+    min_lat = min(latitudes)
+    max_lon = max(longitudes)
+    min_lon = min(longitudes)
+    lat_diff = max_lat - min_lat
+    lon_diff = max_lon - min_lon
+    avg_lat_for_conv = (max_lat + min_lat) / 2
+    lat_diff_km = lat_diff * 111.32
+    lon_diff_km = lon_diff * 111.32 * math.cos(math.radians(avg_lat_for_conv))
+    new_size = abs(lat_diff_km * lon_diff_km) 
+
+    location = get_nearest_city(new_avg_lat, new_avg_lon)
     
-    if fire:
-        fire_id, _, location, size, intensity, alt_avg, num_data_points, status, max_temp, min_temp, lat_range, lon_range, avg_lat, avg_lon, first_date, first_time, _ = fire
-
-        # Calculate new stats
-        new_num_points = num_data_points + 1
-        new_intensity = ((intensity * num_data_points) + (high_temp + low_temp) / 2) / new_num_points
-        new_max_temp = max(max_temp, high_temp)
-        new_min_temp = min(min_temp, low_temp)
-        new_lat_range = max(lat_range, abs(latitude))
-        new_lon_range = max(lon_range, abs(longitude))
-        new_alt_avg = ((alt_avg * num_data_points) + altitude) / new_num_points
-        new_avg_lat = ((avg_lat * num_data_points) + latitude) / new_num_points
-        new_avg_lon = ((avg_lon * num_data_points) + longitude) / new_num_points
-        
-        lat_diff_km = new_lat_range * 111.32 
-        lon_diff_km = new_lon_range * 111.32 * math.cos(math.radians(new_avg_lat))
-        new_size = abs(lat_diff_km * lon_diff_km)
-
-        cursor.execute(
-            """
-            UPDATE wildfire_status
-            SET size = ?, intensity = ?, alt_avg = ?, num_data_points = ?,
-                max_temp = ?, min_temp = ?, lat_range = ?, lon_range = ?,
-                avg_latitude = ?, avg_longitude = ?, last_updated = ?
-            WHERE name = ?
-            """,
-            (new_size, new_intensity, new_alt_avg, new_num_points, new_max_temp, new_min_temp,
-             new_lat_range, new_lon_range, new_avg_lat, new_avg_lon, now, name)
+    cursor.execute(
+        """
+        INSERT INTO wildfire_status (
+            name, location, size, intensity, alt_avg,
+            avg_latitude, avg_longitude, flights, num_data_points,
+            first_time_stamp, time_stamp, status,
+            max_temp, min_temp, last_flight_id
         )
-    else:
-        # Insert new fire
-        location = get_nearest_city(latitude, longitude)
-        size = 0.0 
-        intensity = (high_temp + low_temp) / 2
-        alt_avg = altitude 
-        lat_range = latitude
-        lon_range = longitude
-        num_data_points = 1
-        first_date = now.split(" ")[0]
-        first_time = now.split(" ")[1]
-        avg_lat = latitude
-        avg_lon = longitude
-
-        cursor.execute(
-            """
-            INSERT INTO wildfire_status (
-                name, location, size, intensity, alt_avg, num_data_points, status,
-                max_temp, min_temp, lat_range, lon_range, avg_latitude, avg_longitude,
-                first_date_received, first_time_received, last_updated
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (name, location, size, intensity, alt_avg, num_data_points, "active",
-             high_temp, low_temp, lat_range, lon_range, avg_lat, avg_lon, first_date, first_time, now)
-        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (name, location, new_size, new_intensity, new_alt_avg,
+         new_avg_lat, new_avg_lon, new_flights, num_points,
+         new_first_time_stamp, new_time_stamp, "active",
+         new_max_temp, new_min_temp, new_last_flight_id)
+    )
 
     conn.commit()
     conn.close()
 
+# Wildfire status updated if new flight id
+def process_new_flight(name: str, flight_id: int):
+    conn = sqlite3.connect("wildfire_data.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT MAX(last_flight_id) FROM wildfire_status WHERE name = ?",
+        (name,)
+    )
+    result = cursor.fetchone()
+    last_flight_id = result[0] if result and result[0] is not None else 0
+    if flight_id > last_flight_id:
+        print(f"New flight {flight_id} received for {name}. Updating statistics...")
+        update_fire_status(name)
+    conn.close()
+
 def get_nearest_city(latitude: float, longitude: float) -> str:
     try:
-        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&zoom=10"
-        
+        url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&zoom=5"
         response = requests.get(url, headers={"User-Agent": "wildfire-status-app"})
         if response.status_code == 200:
             data = response.json()
@@ -389,6 +427,7 @@ def get_nearest_city(latitude: float, longitude: float) -> str:
     except Exception as e:
         print(f"Error getting nearest city: {e}")
         return "Unknown Location"
+
     
 def update_mission_data(export):
     mission_time = export.get("time_stamp")
