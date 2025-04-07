@@ -9,7 +9,7 @@ import tornado.web
 import tornado.websocket
 from tornado.options import define, options, parse_command_line
 from urllib.parse import parse_qs
-from database import init_db, process_packet, fetch_fire_list, fetch_heatmap_data, fetch_all_heatmap_data, sync_to_firebase
+from database import init_db, process_packet, fetch_fire_list, fetch_heatmap_data, fetch_all_heatmap_data, sync_to_firebase, update_fire_status
 
 # Command Line Arguments
 define("port", default=8000, help="Run on the given port", type=int)
@@ -141,11 +141,16 @@ class DatabaseQueryHandler(BaseHandler):
                         SELECT t.*
                         FROM wildfire_status t
                         JOIN (
-                            SELECT name, MAX(time_stamp) as max_time_stamp
-                            FROM wildfire_status
-                            GROUP BY name
+                        SELECT 
+                            name, 
+                            MAX(time_stamp) AS max_time_stamp,
+                            MAX(id) AS max_id
+                        FROM wildfire_status
+                        GROUP BY name
                         ) latest
-                        ON t.name = latest.name AND t.time_stamp = latest.max_time_stamp
+                        ON t.name = latest.name 
+                        AND t.time_stamp = latest.max_time_stamp
+                        AND t.id = latest.max_id
                     """
                     df = pd.read_sql_query(query, conn)
             elif table == "wildfires":
@@ -447,6 +452,20 @@ class FireComparisonHandler(BaseHandler):
         fire_name = self.get_argument("name")
         cursor = self.db.cursor()
 
+        # Get the two most recent entries
+        latest_query = """
+            SELECT time_stamp
+            FROM wildfire_status
+            WHERE name = ?
+            ORDER BY time_stamp DESC
+            LIMIT 2
+        """
+        cursor.execute(latest_query, (fire_name,))
+        rows = cursor.fetchall()
+
+        if len(rows) < 2 or rows[0]["time_stamp"] != rows[1]["time_stamp"]:
+            update_fire_status(fire_name)
+
         current_query = """
             SELECT size, intensity, time_stamp
             FROM wildfire_status
@@ -463,7 +482,7 @@ class FireComparisonHandler(BaseHandler):
 
         current_timestamp = current_record["time_stamp"]
 
-        # Previous Entry in Wildfire Status
+        # Get the previous entry in wildfire_status
         comparison_query = """
             SELECT size, intensity, time_stamp
             FROM wildfire_status
