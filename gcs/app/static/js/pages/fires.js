@@ -222,7 +222,7 @@ class FiresPage {
       <p><strong>Location:</strong> ${nearestCity}</p>
       <p>
         <strong>Size:</strong> ${fire.size.toFixed(2)} sq km 
-        ${sizeIndicator ? `<small>(vs. ${fire.prev_size} sq km ${sizeIndicator})</small>` : ''}
+        ${sizeIndicator ? `<small>(vs. ${fire.prev_size.toFixed(2)} sq km ${sizeIndicator})</small>` : ''}
         <br>
         ${sizeBar}
       </p>

@@ -96,7 +96,7 @@ class TimelineController {
           const timestamps = validThermalData.map(d => new Date(d.time_stamp / 1_000_000));
           this.startTime = new Date(Math.min(...timestamps.map(d => d.getTime())));
           this.endTime = new Date(Math.max(...timestamps.map(d => d.getTime())));
-          this.currentTime = this.startTime;
+          this.currentTime = this.endTime;
       
           const temps = validThermalData.flatMap(d => [d.high_temp, d.low_temp]);
           const minTemp = Math.min(...temps);

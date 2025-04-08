@@ -135,7 +135,7 @@ def process_packet(packet, name, flight_id, status="active"):
         alt = packet.get("alt", 0.0)
         high_temp = packet.get("high_temp", 0.0)
         low_temp = packet.get("low_temp", 0.0)
-        time_stamp = packet.get("time_stamp", time.time_ns() - (1/4) * ns24h)
+        time_stamp = packet.get("time_stamp", time.time_ns() - (1/200) * ns24h)
         heading = 0
         speed = 0
 
@@ -479,7 +479,7 @@ def init_flights_db():
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS flights (
-            flight_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            flight_id INTEGER,
             name TEXT,
             ulog_filename TEXT,
             time_started REAL,
@@ -497,7 +497,7 @@ def update_flights(flight_id, name, ulog_filename):
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*) FROM flights WHERE flight_id = ?", (flight_id,))
+    cursor.execute("SELECT COUNT(*) FROM flights WHERE flight_id = ? AND name = ?", (flight_id, name,))
     count = cursor.fetchone()[0]
 
     if count == 0:

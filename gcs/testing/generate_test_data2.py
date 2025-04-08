@@ -4,13 +4,13 @@ import math
 
 def generate_test_data(file_path, name, center_lat, center_lon, num_points=100):
     packets = []
-    half_range = 0.01
+    half_range = 0.0125
 
     # Hotspots on the Map
     hotspots = [
-        {"lat": center_lat + 0.002, "lon": center_lon - 0.003, "intensity": 0.4},
-        {"lat": center_lat + 0.001, "lon": center_lon - 0.005, "intensity": 1.0},
-        {"lat": center_lat + 0.002, "lon": center_lon + 0.01, "intensity": 0.85}
+        {"lat": center_lat + 0.02, "lon": center_lon + 0.03, "intensity": 0.9},
+        {"lat": center_lat - 0.008, "lon": center_lon + 0.005, "intensity": 0.35},
+        {"lat": center_lat - 0.002, "lon": center_lon + 0.02, "intensity": 0.1}
     ]
 
     sigma = 0.005
@@ -70,8 +70,8 @@ def generate_test_data(file_path, name, center_lat, center_lon, num_points=100):
 
 generate_test_data(
     file_path='test_packets.txt',
-    name='Davis Fire',
+    name='Washoe Fire',
     center_lat=39.305278,
-    center_lon=-119.8325,
+    center_lon=-116.8325,
     num_points=1000
 )
