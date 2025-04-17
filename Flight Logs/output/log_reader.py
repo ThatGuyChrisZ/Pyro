@@ -5,6 +5,7 @@ file = "log_22_2025-3-21-17-08-16.ulg"
 log_path = "C:/Users/warbr/Documents/GitHub/Pyro/Flight Logs/" + file
 
 subprocess.call(['ulog2csv','-o','.\output', log_path])
+subprocess.call(['ulog2kml', log_path])
 
 log_file = ULog(log_path)
 flight_data = []
