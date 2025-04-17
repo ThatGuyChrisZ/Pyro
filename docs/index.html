@@ -1,94 +1,652 @@
 <!DOCTYPE html>
-<html lang="en">
+<html  >
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Team 38 - Firefighting Drone</title>
-    <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #eef2f3;
-            text-align: center;
-        }
-        header {
-            background: #ff5733;
-            color: white;
-            padding: 1.5em 0;
-            font-size: 1.5em;
-            font-weight: bold;
-        }
-        section {
-            margin: 30px auto;
-            padding: 25px;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-            max-width: 800px;
-        }
-        h2 {
-            color: #ff5733;
-        }
-        footer {
-            margin-top: 30px;
-            background: #333;
-            color: white;
-            padding: 1.5em 0;
-            font-size: 0.9em;
-        }
-        a {
-            color: #ff5733;
-            text-decoration: none;
-            font-weight: bold;
-        }
-    </style>
+  <!-- Site made with Mobirise Website Builder v6.0.1, https://mobirise.com -->
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="generator" content="Mobirise v6.0.1, mobirise.com">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
+  <link rel="shortcut icon" href="assets/images/photo-1604420984728-07e399b3dbfb.jpeg" type="image/x-icon">
+  <meta name="description" content="Innovative drone technology aids in wildfire tracking and data visualization through heat maps.">
+  
+  
+  <title>PYRO Wildfire Tracking Project: Data Visualization and Progress</title>
+  <link rel="stylesheet" href="assets/web/assets/mobirise-icons2/mobirise2.css">
+  <link rel="stylesheet" href="assets/bootstrap/css/bootstrap.min.css">
+  <link rel="stylesheet" href="assets/bootstrap/css/bootstrap-grid.min.css">
+  <link rel="stylesheet" href="assets/bootstrap/css/bootstrap-reboot.min.css">
+  <link rel="stylesheet" href="assets/parallax/jarallax.css">
+  <link rel="stylesheet" href="assets/dropdown/css/style.css">
+  <link rel="stylesheet" href="assets/socicon/css/styles.css">
+  <link rel="stylesheet" href="assets/theme/css/style.css">
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Liter&display=swap&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Liter&display=swap&display=swap"></noscript>
+  <link rel="preload" as="style" href="assets/mobirise/css/mbr-additional.css?v=kiuDjm"><link rel="stylesheet" href="assets/mobirise/css/mbr-additional.css?v=kiuDjm" type="text/css">
+
+  
+  
+  
 </head>
 <body>
-    <header>
-        <h1>Pyro Fire Tracking</h1>
-        <p>Autonomous Wildfire-Monitoring/Mapping Quadcopter</p>
-        <p>CS 426 Senior Project in Computer Science, Spring 2025, at UNR, CSE Department</p>
-        <p>Team Members: Chris Zinser, Robb Northrup, Eric Westenburg</p>
-        <p>Instructors: Dave Feil-Seifer & Sara Davis</p>
-        <p>External Advisors: Aditya Nair & Dustin Barr</p>
-    </header>
-    <section>
-        <h2>About Our Project</h2>
-        <p>The goal of our project is to produce a cost-effective, autonomous drone system capable of generating highly accurate, real-time 2D heat maps of active wildfires. Our approach centers around two main elements: a ground control system and a semi-autonomous drone. The drone is responsible for data collection using a variety of sensors: a thermal camera, GPS, dual-redundant IMU, and an altimeter. It is custom-designed and 3D-printed using a carbon nylon frame with an emphasis on maintaining a light weight alongside the necessary power management dependencies. On board the drone is a variety of system hardware components including a Pixhawk flight controller, an electronic speed controller, and a ride-along Raspberry Pi board that is utilized along with a telemetry radio to communicate with the ground control station.</p>
+  
+  <section data-bs-version="5.1" class="menu menu2 cid-uIyBNt0aNw" once="menu" id="menu-5-uIyBNt0aNw">
+	
 
-        <p>The ground control system is responsible for both flight control and data analysis. Radio communication will be utilized to both communicate flight commands and transmit collected data from the ride-along board. The Ardupilot program on the ground control computer communicates with the on board flight controller to maintain the proper flight path and ensure motors, propellers, and the speed controller are functioning as intended. Data collected by the drone will be serialized and delivered as packets to the ground control computer. Once received, data packets are decoded and permanently stored in an SQLite database. The database is then visualized as a heat map overlay using the Javascript Leaflet library and OpenStreetMap. </p>
-        <p>The primary intended users for this project are emergency management and fire departments. Our aim is to improve upon their current wildfire tracking solutions, like satellite imaging, by producing high-resolution wildfire heatmaps in real time. Users could also include residents who seek accurate, timely data in these emergency situations. With emergency management technology, dependability is essential. We will seek to maintain reliability through accurate data collection, data transmission checks and post-processing correction. Making certain that only reliable data is used for analysis and visualization will also ensure that safety and security are achieved. </p>
-    </section>
-    <section>
-        <h2>Project-Related Resources</h2>
-        <h3>“Problem Domain Book”</h3>
-        <p><b>Wireless Communications and Networking for Unmanned Aerial Vehicles</b></p>
-        <p>Walid Saad, Mehdi Bennis, Mohammad Mozaffari, Xingqin Lin</p>
-        <p>Published by Cambridge University Press in 2020, this book provides a thorough exploration of potential implementations of wireless UAV communications and networking, as well as the challenges associated with each. This includes topics such as UAV network resource management, path planning, and real-time communication strategies. The communication strategies discussed that may pertain to our project include 5G, radio communication, UAVs as relays, wireless backhauling, and the security aspects of these networks.</p>
+	<nav class="navbar navbar-dropdown navbar-fixed-top navbar-expand-lg">
+		<div class="container">
+			<div class="navbar-brand">
+				<span class="navbar-logo">
+					<a href="https://mobiri.se">
+						<img src="assets/images/photo-1604420984728-07e399b3dbfb.jpeg" alt="Mobirise Website Builder" style="height: 4.3rem;">
+					</a>
+				</span>
+				<span class="navbar-caption-wrap"><a class="navbar-caption text-black display-4" href="https://mobiri.se">PYRO</a></span>
+			</div>
+			<button class="navbar-toggler" type="button" data-toggle="collapse" data-bs-toggle="collapse" data-target="#navbarSupportedContent" data-bs-target="#navbarSupportedContent" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+				<div class="hamburger">
+					<span></span>
+					<span></span>
+					<span></span>
+					<span></span>
+				</div>
+			</button>
+			<div class="collapse navbar-collapse" id="navbarSupportedContent">
+				<ul class="navbar-nav nav-dropdown" data-app-modern-menu="true">
+					<li class="nav-item">
+						<a class="nav-link link text-black display-4" href="https://mobiri.se">About</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link link text-black display-4" href="https://mobiri.se" aria-expanded="false">Resources</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link link text-black display-4" href="https://mobiri.se">Status</a>
+					</li>
+				</ul>
+				
+				<div class="navbar-buttons mbr-section-btn">
+					<a class="btn btn-primary display-4" href="https://mobiri.se">Get Involved</a>
+				</div>
+			</div>
+		</div>
+	</nav>
+</section>
 
-        <h3>Reference Articles</h3>
-        <p><b>Wildfire Monitoring in Remote Areas using Autonomous Unmanned Aerial Vehicles</b></p>
-        <p>Fatemeh Afghah, Abolfazl Razi, Jacob Chakareski, Jonathan Ashdown</p>
-        <p><a>https://ieeexplore.ieee.org/abstract/document/8845309</a></p>
-        <p>This 2019 paper from an IEEE Conference outlines a proposed drone-based system for wildfire monitoring that particularly targets remote areas. A key feature of their approach is a distributed leader-follower model where drones form clusters to maximize the collective field coverage. With the primary objectives of their system being maximizing the coverage area using a minimum number of drones and limiting energy consumption.</p>
+<section data-bs-version="5.1" class="header18 cid-uIyBNt1o7W mbr-fullscreen" data-bg-video="https://www.youtube.com/embed/DQpBiYI_7M0?autoplay=1&amp;loop=1&amp;playlist=DQpBiYI_7M0&amp;t=20&amp;mute=1&amp;playsinline=1&amp;controls=0&amp;showinfo=0&amp;autohide=1&amp;allowfullscreen=true&amp;mode=transparent" id="hero-16-uIyBNt1o7W">
+  
 
-        <p><b>Optimized Deployment of Unmanned Aerial Vehicles for Wildfire Detection and Monitoring</b></p>
-        <p>Tai Yang, Shumeng Zhang, Yong Wang, Jialei Liu</p>
-        <p><a>https://arxiv.org/abs/2112.03010</a></p>
-        <p>This 2021 paper from a group of students at Chongqing University details a strategic deployment model to optimize the number and positions of drones for full wildfire coverage. An integral focus of their model is maintaining flexibility and adaptivity to unique terrains and the expansion of the wildfire area. Using wildfire timing data from an Australian fire of the previous year, they concluded their system would pose a benefit as a novel wildfire rapid response system.</p>
+  <div class="mbr-overlay" style="opacity: 0.5; background-color: rgb(0, 0, 0);"></div>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="content-wrap col-12 col-md-12">
+        <h1 class="mbr-section-title mbr-fonts-style mbr-white mb-4 display-1">
+          <strong>Wildfire Watch</strong>
+        </h1>
+        
+        <p class="mbr-fonts-style mbr-text mbr-white mb-4 display-7">Tracking flames with cutting-edge drones for a safer tomorrow.</p>
+        <div class="mbr-section-btn">
+          <a class="btn btn-white-outline display-7" href="https://mobiri.se">Join Us</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
-        <h3>Project-Related Website</h3>
-        <p><b>Airlab - Wildland Fire Safety Monitoring</b></p>
-        <p><a>https://theairlab.org/wildfire/</a></p>
-        <p>Airlab is a group out of the Robotics Institute at Carnegie Mellon University. On this webpage, they outline research into an autonomous UAV wildfire tracking system that uses wildfire simulations for informative path planning and a variety of sensors (RGB, thermal, and lidar) for data collection. The webpage includes various useful videos of their previous flight tests and findings. </p>
-    </section>
-    <section>
-        <h2>Our Team</h2>
-        <p>Meet the dedicated team of engineers behind this innovative project.</p>
-    </section>
-    <footer>
-        <p>&copy; 2025 Team 38 - University of Nevada, Reno</p>
-    </footer>
+<section data-bs-version="5.1" class="header18 cid-uIyBNt1Wyv mbr-fullscreen" data-bg-video="https://www.youtube.com/embed/gfxkNA9EWEs?autoplay=1&amp;loop=1&amp;playlist=gfxkNA9EWEs&amp;t=20&amp;mute=1&amp;playsinline=1&amp;controls=0&amp;showinfo=0&amp;autohide=1&amp;allowfullscreen=true&amp;mode=transparent" id="video-5-uIyBNt1Wyv">
+  
+
+  <div class="mbr-overlay" style="opacity: 0.3; background-color: rgb(0, 0, 0);"></div>
+  <div class="container-fluid">
+    <div class="row">
+    </div>
+  </div>
+</section>
+
+<section data-bs-version="5.1" class="gallery4 cid-uIyBNt1G8w" id="gallery-12-uIyBNt1G8w">
+  
+  
+  <div class="container-fluid gallery-wrapper">
+    <div class="row justify-content-center">
+      <div class="col-12 content-head">
+        
+      </div>
+    </div>
+    <div class="grid-container">
+      <div class="grid-container-1" style="transform: translate3d(-200px, 0px, 0px);">
+        <div class="grid-item">
+          <img src="assets/images/photo-1634009653739-df37d471790d.jpeg" alt="Mobirise Website Builder">
+        </div>
+        <div class="grid-item">
+          <img src="assets/images/photo-1628707541780-bbf66f6097d2.jpeg" alt="Mobirise Website Builder">
+        </div>
+        <div class="grid-item">
+          <img src="assets/images/photo-1503585850419-d4c96ef49155.jpeg" alt="Mobirise Website Builder">
+        </div>
+        <div class="grid-item">
+          <img src="assets/images/photo-1505059543657-d11072be4590.jpeg" alt="Mobirise Website Builder">
+        </div>
+      </div>
+      <div class="grid-container-2" style="transform: translate3d(-70px, 0px, 0px);">
+        <div class="grid-item">
+          <img src="assets/images/photo-1544097433-5bbf1c87e24e.jpeg" alt="Mobirise Website Builder">
+        </div>
+        <div class="grid-item">
+          <img src="assets/images/photo-1634009540176-215c4e167597.jpeg" alt="Mobirise Website Builder">
+        </div>
+        <div class="grid-item">
+          <img src="assets/images/photo-1602980085374-7e743fff3cc6.jpeg" alt="Mobirise Website Builder">
+        </div>
+        <div class="grid-item">
+          <img src="assets/images/photo-1621525332263-6643c2ed0fa3.jpeg" alt="Mobirise Website Builder">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-bs-version="5.1" class="features023 cid-uIyBNt1UBU" id="metrics-1-uIyBNt1UBU">
+
+    
+
+    
+    
+    <div class="container">
+        
+        <div class="row content-row justify-content-center">
+            <div class="item features-without-image col-12 col-md-6 col-lg-4 item-mb">
+                <div class="item-wrapper">
+                    <div class="title mb-2 mb-md-3">
+                        <span class="num mbr-fonts-style display-1">
+                            <strong>100+</strong></span>
+                    </div>
+                    <h4 class="card-title mbr-fonts-style display-5">
+                        <strong>Drones Deployed</strong>
+                    </h4>
+                    
+                </div>
+            </div>
+            <div class="item features-without-image col-12 col-md-6 col-lg-4 item-mb">
+                <div class="item-wrapper">
+                    <div class="title mb-2 mb-md-3">
+                        <span class="num mbr-fonts-style display-1">
+                            <strong>5000+</strong></span>
+                    </div>
+                    <h4 class="card-title mbr-fonts-style display-5">
+                        <strong>Data Points Collected</strong>
+                    </h4>
+                    
+                </div>
+            </div>
+            <div class="item features-without-image col-12 col-md-6 col-lg-4 item-mb">
+                <div class="item-wrapper">
+                    <div class="title mb-2 mb-md-3">
+                        <span class="num mbr-fonts-style display-1">
+                            <strong>10</strong></span>
+                    </div>
+                    <h4 class="card-title mbr-fonts-style display-5">
+                        <strong>Team Members</strong>
+                    </h4>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="video04 cid-uIyBNt1rdv" id="video-6-uIyBNt1rdv">
+  
+  
+  <div class="container">
+    <div class="mbr-section-head mb-5">
+      <h4 class="mbr-section-title mbr-fonts-style mb-0 mt-0 display-2">
+        <strong>Wildfire Drone Footage</strong>
+      </h4>
+      
+    </div>
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-10 video-block">
+        <div class="video-wrapper"><iframe class="mbr-embedded-video" src="https://www.youtube.com/embed/suBbcWI8ut0?rel=0&amp;amp;mute=1&amp;showinfo=0&amp;autoplay=1&amp;loop=1&amp;playlist=suBbcWI8ut0" width="1280" height="720" frameborder="0" allowfullscreen></iframe></div>
+        
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-bs-version="5.1" class="list05 cid-uIyBNt1wwo" id="faq-3-uIyBNt1wwo">
+    
+    <div class="container">
+        <div class="col-12 mb-5 content-head">
+            <h3 class="mbr-section-title mbr-fonts-style align-center mb-0 display-2">
+                <strong>Frequently Asked Questions</strong>
+            </h3>
+            
+        </div>
+        <div class="row justify-content-center ">
+            <div class="col-12 col-lg-8">
+                <div class="item features-without-image col-12 active">
+                    <div class="item-wrapper">
+                        <h5 class="mbr-card-title mbr-fonts-style mt-0 mb-3 display-5">
+                            <strong>What is We are PYRO?</strong></h5>
+                        <p class="mbr-text mbr-fonts-style mt-0 mb-3 display-7">A project focused on wildfire tracking using drones.</p>
+                    </div>
+                </div>
+                <div class="item features-without-image col-12">
+                    <div class="item-wrapper">
+                        <h5 class="mbr-card-title mbr-fonts-style mt-0 mb-3 display-5">
+                            <strong>How does the drone work?</strong></h5>
+                        <p class="mbr-text mbr-fonts-style mt-0 mb-3 display-7">It collects data and creates heat maps.</p>
+                    </div>
+                </div>
+                <div class="item features-without-image col-12">
+                    <div class="item-wrapper">
+                        <h5 class="mbr-card-title mbr-fonts-style mt-0 mb-3 display-5">
+                            <strong>What are the project goals?</strong></h5>
+                        <p class="mbr-text mbr-fonts-style mt-0 mb-3 display-7">To improve wildfire monitoring and response.</p>
+                    </div>
+                </div>
+                <div class="item features-without-image col-12">
+                  <div class="item-wrapper">
+                      <h5 class="mbr-card-title mbr-fonts-style mt-0 mb-3 display-5">
+                          <strong>How can I support the project?</strong></h5>
+                      <p class="mbr-text mbr-fonts-style mt-0 mb-3 display-7">Contribute resources or share our mission.</p>
+                  </div>
+              </div>
+              <div class="item features-without-image col-12">
+                <div class="item-wrapper">
+                    <h5 class="mbr-card-title mbr-fonts-style mt-0 mb-3 display-5">
+                        <strong>Where can I find updates?</strong></h5>
+                    <p class="mbr-text mbr-fonts-style mt-0 mb-3 display-7">Check our website for the latest news.</p>
+                </div>
+            </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="article12 cid-uIyBNt1K67" id="about-us-12-uIyBNt1K67">    
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-12 col-lg-10">
+                <h3 class="mbr-section-title mbr-fonts-style mb-4 mt-0 display-2">
+                <strong>Our Mission Ignited</strong>
+                </h3>
+                
+                <p class="mbr-text mbr-fonts-style display-7">At We are PYRO, we’re not just watching flames; we’re tracking them with cutting-edge technology. Our drones soar above wildfires, gathering crucial data that transforms chaos into clarity.</p>
+                <p class="mbr-text mbr-fonts-style display-7">Our vision is to create a safer environment by providing real-time insights into wildfire behavior. With our heat map visualizations, we aim to empower firefighters and communities to act swiftly and effectively.</p>
+                <p class="mbr-text mbr-fonts-style display-7">Join us as we blaze a trail in wildfire monitoring, ensuring that every spark is accounted for and every blaze is managed with precision.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="image02 cid-uIyBNt1ny0 mbr-fullscreen mbr-parallax-background" id="image-13-uIyBNt1ny0">
+    
+    
+    <div class="container">
+        <div class="row"></div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="features19 cid-uIyBNt1eQb" id="features-27-uIyBNt1eQb">
+    
+    
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            
+        </div>
+        <div class="row">
+            <div class="item features-without-image col-12 col-lg-4 item-mb active">
+                <div class="item-wrapper">
+                    <div class="card-box align-left">
+                        <div class="img-wrapper mb-3">
+                            <img class="" src="assets/images/photo-1603661885651-c909f20987a5.jpeg">
+                        </div>
+                        <h5 class="card-title mbr-fonts-style display-5">
+                            <strong>Data Collection</strong>
+                        </h5>
+                        <p class="card-text mbr-fonts-style display-7">Advanced sensors capture real-time wildfire data from the sky.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="item features-without-image col-12 col-lg-4 item-mb">
+                <div class="item-wrapper">
+                    <div class="card-box align-left">
+                        <div class="img-wrapper mb-3">
+                            <img class="" src="assets/images/photo-1567140980243-5b02c9e1bfd8.jpeg" data-slide-to="1" data-bs-slide-to="1">
+                        </div>
+                        <h5 class="card-title mbr-fonts-style display-5">
+                            <strong>Heat Mapping</strong>
+                        </h5>
+                        <p class="card-text mbr-fonts-style display-7">Visualize temperature variations to assess fire intensity.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="item features-without-image col-12 col-lg-4 item-mb">
+                <div class="item-wrapper">
+                    <div class="card-box align-left">
+                        <div class="img-wrapper mb-3">
+                            <img class="" src="assets/images/photo-1617917197067-5de504d8518e.jpeg" data-slide-to="2" data-bs-slide-to="2">
+                        </div>
+                        <h5 class="card-title mbr-fonts-style display-5">
+                            <strong>Real-Time Updates</strong>
+                        </h5>
+                        <p class="card-text mbr-fonts-style display-7">Instant notifications keep teams informed during wildfires.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="features03 cid-uIyBNt26TT" id="news-1-uIyBNt26TT">
+  
+  
+  <div class="container-fluid">
+    <div class="row justify-content-center mb-5">
+      <div class="col-12 content-head">
+        <div class="mbr-section-head">
+          <h4 class="mbr-section-title mbr-fonts-style align-center mb-0 display-2">
+            <strong>Latest Project Updates</strong>
+          </h4>
+          
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="item features-image col-12 col-md-6 col-lg-3 active">
+        <div class="item-wrapper">
+          <div class="item-img mb-3">
+            <img src="assets/images/photo-1536245344390-dbf1df63c30a.jpeg" alt="Mobirise Website Builder" title="">
+          </div>
+          <div class="item-content align-left">
+            <h5 class="item-title mbr-fonts-style mt-0 mb-2 display-5">
+              <strong>Drone Data Collection Success</strong>
+            </h5>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">2025-04-15</p>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">Our drones have successfully captured real-time data over wildfires, providing invaluable insights for firefighting efforts. Stay tuned!</p>
+            <div class="mbr-section-btn item-footer">
+              <a href="" class="btn item-btn btn-primary display-7">Read</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="item features-image col-12 col-md-6 col-lg-3">
+        <div class="item-wrapper">
+          <div class="item-img mb-3">
+            <img src="assets/images/photo-1599711729546-741e8108db4f.jpeg" alt="Mobirise Website Builder" title="" data-slide-to="1" data-bs-slide-to="1">
+          </div>
+          <div class="item-content align-left">
+            <h5 class="item-title mbr-fonts-style mb-2 mt-0 display-5">
+              <strong>Heat Map Visualization Released</strong>
+            </h5>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">2025-04-14</p>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">Check out our new heat map visualization that displays wildfire data in a user-friendly format. It's hot!</p>
+            <div class="mbr-section-btn item-footer">
+              <a href="" class="btn item-btn btn-primary display-7">Read</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="item features-image col-12 col-md-6 col-lg-3">
+        <div class="item-wrapper">
+          <div class="item-img mb-3">
+            <img src="assets/images/photo-1634009653379-a97409ee15de.jpeg" alt="Mobirise Website Builder" title="" data-slide-to="2" data-bs-slide-to="2">
+          </div>
+          <div class="item-content align-left">
+            <h5 class="item-title mbr-fonts-style mb-2 mt-0 display-5">
+              <strong>UI Screenshots Available Now</strong>
+            </h5>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">2025-04-13</p>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">Sneak peek of our user interface! It's sleek, intuitive, and ready to tackle wildfires head-on.</p>
+            <div class="mbr-section-btn item-footer">
+              <a href="" class="btn item-btn btn-primary display-7">Read</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="item features-image col-12 col-md-6 col-lg-3">
+        <div class="item-wrapper">
+          <div class="item-img mb-3">
+            <img src="assets/images/photo-1625532280734-83a25a95d914.jpeg" alt="Mobirise Website Builder" title="" data-slide-to="2" data-bs-slide-to="2">
+          </div>
+          <div class="item-content align-left">
+            <h5 class="item-title mbr-fonts-style mb-2 mt-0 display-5">
+              <strong>Project Milestone Achieved</strong>
+            </h5>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">2025-04-12</p>
+            <p class="mbr-text mbr-fonts-style mb-3 display-7">We’ve reached a major milestone in our project. Thanks to our team for their hard work and dedication!</p>
+            <div class="mbr-section-btn item-footer">
+              <a href="" class="btn item-btn btn-primary display-7">Read</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section data-bs-version="5.1" class="article13 cid-uIyBNt25Kj" id="call-to-action-3-uIyBNt25Kj">
+    
+    
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="card col-md-12 col-lg-10">
+                <div class="card-wrapper">
+                    <div class="card-box align-left">
+                        <h4 class="card-title mbr-fonts-style display-2">
+                            <strong>Join Us in the Fight</strong>
+                        </h4>
+                        
+                        <div class="mbr-section-btn mt-4">
+                        <a class="btn btn-primary display-4" href="https://mobiri.se">Get Involved</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="gallery10 cid-uIyBNt290C" id="features-69-uIyBNt290C">
+  
+
+
+  <div class="container-fluid">
+
+      <div class="loop-container">
+        <div class="item display-1" data-linewords="Real-time wildfire data collection * Interactive heat map visualizations * " data-direction="-1" data-speed="0.05">☁️ Best offers ☁️ Free delivery ☁️ Perfect design ☁️ Comfort ☁️ Support 24/7 ☁️ Vibes</div>
+
+        <div class="item display-1" data-linewords="Real-time wildfire data collection * Interactive heat map visualizations * " data-direction="-1" data-speed="0.05">☁️ Best offers ☁️ Free delivery ☁️ Perfect design ☁️ Comfort ☁️ Support 24/7 ☁️ Vibes</div>
+      </div>
+    
+  </div>
+</section>
+
+<section data-bs-version="5.1" class="people07 cid-uIyBNt2nX2" id="testimonials-8-uIyBNt2nX2">
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-12 col-lg-8">
+                <p class="card-text mbr-fonts-style display-5">PYRO's technology is a game changer for wildfire management!</p>
+                <div class="img-wrapper mt-3 justify-content-center">
+                    <img src="assets/images/photo-1679746584014-fb31d4eb0a5e.jpeg" alt="" data-slide-to="0" data-bs-slide-to="0">
+                </div>
+                <p class="card-title mbr-fonts-style mt-3 display-7">
+                    <strong>John Smith</strong>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="social05 cid-uIyBNt3tn5" id="follow-us-2-uIyBNt3tn5">
+    
+
+    
+
+    <div class="container">
+        <div class="row">
+            <h3 class="mbr-section-title align-center mb-5 mbr-fonts-style display-2">
+                <strong>Join Our Fire Fight!</strong>
+            </h3>
+            <div class="col-12">
+                <div class="social-row">
+                    <div class="soc-item">
+                        <a href="https://mobiri.se/" target="_blank">
+                            <span class="mbr-iconfont socicon socicon-facebook"></span>
+                        </a>
+                    </div>
+                    <div class="soc-item">
+                        <a href="https://mobiri.se/" target="_blank">
+                            <span class="mbr-iconfont socicon-twitter socicon"></span>
+                        </a>
+                    </div>
+                    <div class="soc-item">
+                        <a href="https://mobiri.se/" target="_blank">
+                            <span class="mbr-iconfont socicon-instagram socicon"></span>
+                        </a>
+                    </div>
+                    <div class="soc-item">
+                        <a href="https://mobiri.se/" target="_blank">
+                            <span class="mbr-iconfont socicon socicon-linkedin"></span>
+                        </a>
+                    </div>
+                    <div class="soc-item">
+                        <a href="https://mobiri.se/" target="_blank">
+                            <span class="mbr-iconfont socicon socicon-twitch"></span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="form5 cid-uIyBNt3GKM" id="contact-form-3-uIyBNt3GKM">
+    
+    
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-12 content-head">
+                <div class="mbr-section-head mb-5">
+                    <h3 class="mbr-section-title mbr-fonts-style align-center mb-0 display-2">
+                        <strong>Get In Touch!</strong>
+                    </h3>
+                    
+                </div>
+            </div>
+        </div>
+        <div class="row justify-content-center">
+            <div class="col-lg-8 mx-auto mbr-form" data-form-type="formoid">
+                <form action="https://mobirise.eu/" method="POST" class="mbr-form form-with-styler" data-form-title="Form Name"><input type="hidden" name="email" data-form-email="true" value="l4DhX6B3j1UPUwkAQeZabPUOU1fSuwyqBcnaZKHpEe547VQLfRovqeUoYs+Ib5nfM2NEPuoFUuRDkwFuOti/Nl2DaqP9IsugFM7/LW6EhiwvRtOaf/rSO4PBtaNMy71C">
+                    <div class="row">
+                        <div hidden="hidden" data-form-alert="" class="alert alert-success col-12">Thanks for filling out the form!</div>
+                        <div hidden="hidden" data-form-alert-danger="" class="alert alert-danger col-12">
+                            Oops...! some problem!
+                        </div>
+                    </div>
+                    <div class="dragArea row">
+                        <div class="col-md col-sm-12 form-group mb-3" data-for="name">
+                            <input type="text" name="name" placeholder="Name" data-form-field="name" class="form-control" value="" id="name-contact-form-3-uIyBNt3GKM">
+                        </div>
+                        <div class="col-md col-sm-12 form-group mb-3" data-for="email">
+                            <input type="email" name="email" placeholder="Email" data-form-field="email" class="form-control" value="" id="email-contact-form-3-uIyBNt3GKM">
+                        </div>
+                        <div class="col-12 form-group mb-3 mb-3" data-for="url">
+                            <input type="url" name="url" placeholder="Phone" data-form-field="url" class="form-control" value="" id="url-contact-form-3-uIyBNt3GKM">
+                        </div>
+                        <div class="col-12 form-group mb-3" data-for="textarea">
+                            <textarea name="textarea" placeholder="Message" data-form-field="textarea" class="form-control" id="textarea-contact-form-3-uIyBNt3GKM"></textarea>
+                        </div>
+                        <div class="col-lg-12 col-md-12 col-sm-12 align-center mbr-section-btn">
+                            <button type="submit" class="btn btn-primary display-7">Send It!</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section data-bs-version="5.1" class="contacts4 map1 cid-uIyBNt3D6z" id="contacts-3-uIyBNt3D6z">
+
+	
+
+    <div class="main_wrapper">
+		<div class="b_wrapper">
+			<div class="container-fluid">
+				<div class="row justify-content-start">
+					<div class="col-md-5 col-lg-4 item-wrapper">
+                        <h5 class="cardTitle mbr-fonts-style mb-2 display-5">
+                            <strong>Contact Us</strong>
+                        </h5>
+                        <ul class="list mbr-fonts-style display-7">
+                            <li class="mbr-text item-wrap">
+                            Phone:                                
+                            <a href="tel:1-800-FIRE-TRACK" class="text-black">1-800-FIRE-TRACK</a></li>
+
+                            <li class="mbr-text item-wrap">WhatsApp: 
+                            <a href="tel:1-800-FIRE-TRACK" class="text-black">1-800-FIRE-TRACK</a></li> 
+
+                            <li class="mbr-text item-wrap">                            
+                            Email:
+                            <a href="mailto:info@pyroproject.com" class="text-black">info@pyroproject.com</a>                        
+                            </li>
+
+                            <li class="mbr-text item-wrap">                        
+                            Address:
+                            123 Flame St, Firetown, USA
+                            </li>
+
+                            <li class="mbr-text item-wrap">
+                            Working Hours:
+                            Mon-Fri: 9am - 5pm
+                            </li>
+                        </ul>
+					</div>
+				</div>
+			</div>
+		</div>
+        <div class="google-map"><iframe frameborder="0" style="border:0" src="https://www.google.com/maps/embed/v1/place?key=AIzaSyCt1265A4qvZy9HKUeA8J15AOC4SrCyZe4&amp;q=Reno%20United%20States" allowfullscreen=""></iframe></div>
+	</div>
+</section>
+
+<section data-bs-version="5.1" class="footer2 cid-uIyBNt3gZ7" once="footers" id="footer-5-uIyBNt3gZ7">
+    
+
+    
+    
+
+    <div class="container">
+        <div class="row">
+            <div class="col-12 col-lg-6 center mt-2 mb-3">
+                <p class="mbr-fonts-style copyright mb-0 display-7">© 2025 PYRO Project. All rights reserved.</p>
+            </div>
+            <div class="col-12 col-lg-6 center">
+                <div class="row-links mt-2 mb-3">
+                    <ul class="row-links-soc">
+                        
+                        
+                        
+                        
+                    <li class="row-links-soc-item mbr-fonts-style display-7">
+                            <a href="#" class="text-white">Privacy</a>
+                        </li><li class="row-links-soc-item mbr-fonts-style display-7">
+                            <a href="#" class="text-white">Terms</a>
+                        </li><li class="row-links-soc-item mbr-fonts-style display-7">
+                            <a href="#" class="text-white">Support</a>
+                        </li><li class="row-links-soc-item mbr-fonts-style display-7">
+                            <a href="#" class="text-white">Contact</a>
+                        </li></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section><section class="display-7" style="padding: 0;align-items: center;justify-content: center;flex-wrap: wrap;    align-content: center;display: flex;position: relative;height: 4rem;"><a href="https://mobiri.se/" style="flex: 1 1;height: 4rem;position: absolute;width: 100%;z-index: 1;"><img alt="" style="height: 4rem;" src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=="></a><p style="margin: 0;text-align: center;" class="display-7">&#8204;</p><a style="z-index:1" href="https://mobirise.com/builder/ai-website-maker.html">AI Website Maker</a></section><script src="assets/bootstrap/js/bootstrap.bundle.min.js"></script>  <script src="assets/parallax/jarallax.js"></script>  <script src="assets/smoothscroll/smooth-scroll.js"></script>  <script src="assets/ytplayer/index.js"></script>  <script src="assets/dropdown/js/navbar-dropdown.js"></script>  <script src="assets/vimeoplayer/player.js"></script>  <script src="assets/scrollgallery/scroll-gallery.js"></script>  <script src="assets/theme/js/script.js"></script>  <script src="assets/formoid/formoid.min.js"></script>  
+  
+  
 </body>
 </html>

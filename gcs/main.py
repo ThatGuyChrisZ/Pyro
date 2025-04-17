@@ -11,6 +11,8 @@ import socket # For UDP socket transmission in MODE 2
 import requests
 import argparse
 from packet_class._v4.packet import Packet
+from database import process_packet
+from backend_server import config
 
 PACKET_SIZE = 32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
@@ -26,26 +28,40 @@ UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 #   Description:                                                       #
 #   Return:                                                            #
 ########################################################################
-def send_packet_to_server(packet):
+def send_packet_to_server(packet, config):
     """Sends the decoded packet to the server."""
-    server_url = "http://localhost:8000/add_packet"  # Current Server Location
-    try:
-        packet_data = {
-            "pac_id": packet.pac_id,
-            "gps_data": packet.gps_data,
-            "alt": packet.alt,
-            "high_temp": packet.high_temp,
-            "low_temp": packet.low_temp,
-            "time_stamp": packet.time_stamp
-        }
+    name = config.get("fire_name", "Unnamed Fire")
+    flight_id = config.get("flight_id", -1)
 
-        response = requests.post(server_url, json=packet_data)
-        if response.status_code == 200:
-            print("Packet successfully sent to server.")
-        else:
-            print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
-    except requests.RequestException as e:
-        print(f"Error connecting to the server: {e}")
+    packet_data = {
+        "pac_id": packet.pac_id,
+        "gps_data": packet.gps_data,
+        "alt": packet.alt,
+        "high_temp": packet.high_temp,
+        "low_temp": packet.low_temp,
+        "time_stamp": packet.time_stamp
+    }
+
+    process_packet(packet_data, name, flight_id, "pending")
+
+    ## Old Implementation 
+    # server_url = "http://localhost:8000/add_packet"  # Current Server Location
+    # try:
+    #     packet_data = {
+    #         "pac_id": packet.pac_id,
+    #         "gps_data": packet.gps_data,
+    #         "alt": packet.alt,
+    #         "high_temp": packet.high_temp,
+    #         "low_temp": packet.low_temp,
+    #         "time_stamp": packet.time_stamp
+    #     }
+    #     response = requests.post(server_url, json=packet_data)
+    #     if response.status_code == 200:
+    #         print("Packet successfully sent to server.")
+    #     else:
+    #         print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
+    # except requests.RequestException as e:
+    #     print(f"Error connecting to the server: {e}")
 
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #
@@ -81,6 +97,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
                 print(f"Received packet from {addr}")
             # Read the serialized data from the RF module
             else:
+                rf_serial = serial.Serial(port='COM'+ rf_serial_usb_port, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
                 data = rf_serial.read(PACKET_SIZE)
 
             if prog_mode != 0:
@@ -129,7 +146,7 @@ def receive_and_decode_packets(prog_mode, rf_serial, rf_serial_usb_port):
             # Print the decoded packet and send to the server
             if prog_mode != 0:
                 print(packet)
-            send_packet_to_server(packet)
+            send_packet_to_server(packet, config)
             if prog_mode != 0:
                 print(f"RD: sent ACK packet for ID {packet.pac_id}")
             print(f"ACK packet length: {len(ack_serialized_data)}")

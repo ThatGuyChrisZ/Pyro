@@ -15,8 +15,8 @@ class thermal_data:
         self.compass = 0.00
         
     def __init__(self, frame):
-        self.max_temp = int(max(frame))
-        self.min_temp = int(min(frame))
+        self.max_temp = 200
+        self.min_temp = 100
         self.gps =(0.00,0.00)
         self.barometric = 0
         self.compass = 0.00

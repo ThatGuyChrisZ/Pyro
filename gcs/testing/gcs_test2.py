@@ -16,18 +16,18 @@ UDP_PORT = 5005  # Port for UDP communication in debug mode (2)
 
 # Sample Test Mission Data (simulated QGroundControl data)
 TEST_MISSION_DATA = [
-    {'heading': 113, 'speed': 0.19, 'altitude': 1367.915, 'latitude': 395403690, 'longitude': -1198125921, 'time_stamp': 1740990654.8},
+    {'heading': 130, 'speed': 0.65, 'altitude': 1367.915, 'latitude': 395403690, 'longitude': -1198125921, 'time_stamp': 1740990645.8},
 ]
 
 # Test Packet Data
-TEST_PACKET_ID = 9998
+TEST_PACKET_ID = 2222
 TEST_PACKET = {
     "pac_id": TEST_PACKET_ID,
     "gps_data": [39.5296, -119.8138],
     "alt": 1500,
     "high_temp": 500,
     "low_temp": 300,
-    "time_stamp": 1740990654.9
+    "time_stamp": 1740990645.9
 }
 
 class TestMissionDataIntegration(unittest.TestCase):
@@ -92,7 +92,7 @@ class TestMissionDataIntegration(unittest.TestCase):
         conn.close()
 
         if existing_packet:
-            print("⚠ Test packet already exists in database. Skipping re-sending.")
+            #print("⚠ Test packet already exists in database. Skipping re-sending.")
             return
 
         payload = struct.pack(
@@ -114,6 +114,8 @@ class TestMissionDataIntegration(unittest.TestCase):
             print(f"✅ Sent test packet to UDP port {UDP_PORT}")
         except socket.error as e:
             print(f"❌ Error sending test packet to UDP: {e}")
+        finally:
+            udp_socket.close()
 
         # Retry loop
         for _ in range(5):  # Retry up to 5 times
