@@ -27,7 +27,8 @@ MAX_SEND_TIMEOUT_SEC = 1.0e10 # 10 Second timeout
 #                and then transmission to the GCS                      #
 ########################################################################
 class Packet:
-    def __init__(self, pac_id, gps_data, alt, high_temp, low_temp, time_stamp):
+    def __init__(self, call_sign, pac_id, gps_data, alt, high_temp, low_temp, time_stamp):
+        self.call_sign = call_sign
         self.pac_id = pac_id
         self.gps_data = gps_data # This should be a list of two floats, [lat, long]
         self.alt = alt # Altitude in meters
@@ -39,7 +40,8 @@ class Packet:
         # The format of the payload is as follows: int, float, float, int, short, short, long long
         # Updated to include 'q' to include the long long as a timestamp
         # '<' little endian encoded
-        payload = struct.pack('<IffIhhq', \
+        payload = struct.pack('<6sIffIhhq', \
+            self.call_sign.encode('utf-8')[:6].ljust(6, b'\x00'), \
             self.pac_id, \
             self.gps_data[0], \
             self.gps_data[1], \
@@ -61,7 +63,7 @@ class Packet:
         return f"         ======================\n \
              PACKET #{self.pac_id}\n \
         ======================\n \
-            PACKET ID - {self.pac_id}\n \
+            CALL SIGN - {self.call_sign}\n \
             GPS COORDINATES - {self.gps_data}\n \
             ALTITUDE - {self.alt}\n \
             HIGH TEMP - {self.high_temp}\n \

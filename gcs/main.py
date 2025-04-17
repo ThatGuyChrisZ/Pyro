@@ -28,11 +28,12 @@ import numpy
 # ------------------ #
 # NETWORK MANAGEMENT #
 # ------------------ #
-PACKET_SIZE = 32  # ADJUST?
+PACKET_SIZE = 38 #32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
 DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 rf_serial = None
+CALL_SIGN = "KK72PA"
 
 # --------------- #
 # LOGS MANAGEMENT #
@@ -201,9 +202,10 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
                 continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
-            dat_pac_id, dat_lat, dat_lon, dat_alt, dat_high_temp, dat_low_temp, dat_time_stamp = struct.unpack('<IffIhhq', payload)
+            dat_encoded_call_sign, dat_pac_id, dat_lat, dat_lon, dat_alt, dat_high_temp, dat_low_temp, dat_time_stamp = struct.unpack('<6sIffIhhq', payload)
 
             dat_packet = Packet(
+                call_sign=dat_encoded_call_sign.rstrip(b'\x00').decode('utf-8'),
                 pac_id=dat_pac_id,
                 gps_data=[dat_lat, dat_lon],
                 alt=dat_alt,
@@ -235,7 +237,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
             # ---------------- #
             # HANDSHAKE METHOD #
             # ---------------- #
-            ack_payload = struct.pack('<3sI', b"ACK", dat_pac_id)
+            ack_payload = struct.pack('<6s3sI', CALL_SIGN.encode('utf-8')[:6].ljust(6, b'\x00'), b"ACK", dat_pac_id)
             ack_checksum = zlib.crc32(ack_payload)
 
             ack_serialized_data = ack_payload + struct.pack('<I', ack_checksum)  # Append checksum as unsigned int
@@ -289,22 +291,32 @@ if __name__ == '__main__':
     if args.mode is not None:  # Avoid overwriting if mode isn't provided
         prog_mode = args.mode
     if prog_mode != 2:
-        usb_port_trans = input("Enter the usb port the tranceiver is plugged into (type /'q/' to exit): ")
-        if usb_port_trans == 'q':
-            quit()
-    else:
-        # ------------------ #
-        # START MAIN PROCESS #
-        # ------------------ #
-        if prog_mode != 0:
-            print(f"Starting Main process, mode {prog_mode}")
-        q_unser_packets = mp.Queue()
-        q_log = mp.Queue()
+        successfully_connect_to_transciever = False
+        while successfully_connect_to_transciever is False:
+            successfully_connect_to_transciever = True
+            usb_port_trans = input("Enter the usb port the tranceiver is plugged into (type \'q\' to exit): ")
+            if usb_port_trans == 'q' or usb_port_trans == 'Q':
+                quit()
+            else:
+                try:
+                    rf_serial = serial.Serial(port='/dev/ttyUSB'+usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+                except serial.SerialException as e:
+                    print(f"MAIN: ERROR CONNECTING TO TRANSCIEVER ON PORT \'/dev/ttyUSB{usb_port_trans}\', PLEASE TRY AGAIN . . .")
+                    successfully_connect_to_transciever = False
 
-        p_rad_log_listener = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename(),))
-        p_rec_and_dec = mp.Process(target=receive_and_decode_packets, args=(prog_mode, usb_port_trans, q_unser_packets, q_log,))
-        p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets,))
 
-        p_rad_log_listener.start()
-        p_rec_and_dec.start()
-        p_send_pac_to_serv.start()
+    # ------------------ #
+    # START MAIN PROCESS #
+    # ------------------ #
+    if prog_mode != 0:
+        print(f"Starting Main process, mode {prog_mode}")
+    q_unser_packets = mp.Queue()
+    q_log = mp.Queue()
+
+    p_rad_log_listener = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename(),))
+    p_rec_and_dec = mp.Process(target=receive_and_decode_packets, args=(prog_mode, usb_port_trans, q_unser_packets, q_log,))
+    p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets,))
+
+    p_rad_log_listener.start()
+    p_rec_and_dec.start()
+    p_send_pac_to_serv.start()

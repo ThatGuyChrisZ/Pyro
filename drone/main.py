@@ -51,7 +51,7 @@ UNSIGNED_INT_MAX = 2147483647
 # rf_serial = serial.Serial(port='/dev/ttyUSB1', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
 # alt_sim_file = open('alt_gps.txt', 'r')
 # packet_lib = ctypes.CDLL('./packet_class/packet.so')
-ACK_PACKET_SIZE = 11 # String (of three letters) [3] + integer size (pac_id) [4] + checksum [4]
+ACK_PACKET_SIZE = 17 # Call sign + String (of three letters) [3] + integer size (pac_id) [4] + checksum [4]
 GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
 gps_sim_file = open('sim_gps.txt', 'r')
 UDP_PORT = 5004
@@ -165,7 +165,6 @@ def data_processing(q2,q3):
 ########################################################################
 def create_packet(q3, q4):
     global pac_id_to_create
-    newest = 0
     pid = os.getpid()
     os.sched_setaffinity(pid, {3})
     while True: 
@@ -175,6 +174,7 @@ def create_packet(q3, q4):
 
             # Create a Packet object
             packet = Packet(
+                call_sign=CALL_SIGN,           # Necessary for operating radio within HAM radio freqs
                 pac_id=pac_id_to_create,       # Pulled from global variable
                 gps_data=data.gps,             # GPS coordinates [latitude, longitude]
                 alt=data.barometric,           # Altitude in meters
@@ -269,8 +269,9 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
                 if prog_mode != 0:
                     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} RESENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-                    pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<IffIhhq', ser_pac_to_send[:-4])
+                    encoded_call_sign, pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<6sIffIhhq', ser_pac_to_send[:-4])
                     sent_packet = Packet(
+                        call_sign=encoded_call_sign.rstrip(b'\x00').decode('utf-8'),
                         pac_id=pac_id,
                         gps_data=[lat, lon],
                         alt=alt,
@@ -311,8 +312,9 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
                 if prog_mode != 0:
                     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} SENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-                    pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<IffIhhq', ser_pac_to_send[:-4])
+                    encoded_call_sign, pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<6sIffIhhq', ser_pac_to_send[:-4])
                     sent_packet = Packet(
+                        call_sign = encoded_call_sign.rstrip(b'\x00').decode('utf-8'),
                         pac_id=pac_id,
                         gps_data=[lat, lon],
                         alt=alt,
@@ -459,7 +461,7 @@ def receive_and_decode(my_packet_info_dict, prog_mode, q4, q_log):
             
             if len(data) < ACK_PACKET_SIZE:
                 if prog_mode != 0:
-                    print("RD: Incomplete packet received, skipping...")
+                    print(f"RD: {len(data)} bytes recieved: Incomplete packet, skipping...")
                 continue
 
 
@@ -474,9 +476,10 @@ def receive_and_decode(my_packet_info_dict, prog_mode, q4, q_log):
                 continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
-            type, pac_id = struct.unpack('<3sI', ack_payload)
+            encoded_call_sign, type, pac_id = struct.unpack('<6s3sI', ack_payload)
+            call_sign = encoded_call_sign.rstrip(b'\x00').decode('utf-8')
             if prog_mode != 0:
-                print(f"RD: RECEIVED ACK FOR PACKET ID {pac_id}")
+                print(f"RD: RECEIVED ACK FOR PACKET ID {pac_id} FROM CALL SIGN{call_sign}")
 
             successfully_pop_pac = my_packet_info_dict.pop(pac_id) # True/false value if popped pac_id off of the my_packet_info_dict struct
             if prog_mode != 0:
