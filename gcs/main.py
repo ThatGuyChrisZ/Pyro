@@ -25,7 +25,16 @@ import os
 import csv
 import numpy
 from database import process_packet
-from backend_server import config
+#from backend_server import config
+# FOR DESKAPP
+import sys
+import os
+import subprocess
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
+                             QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit)
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 # ------------------ #
 # NETWORK MANAGEMENT #
@@ -56,9 +65,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 ########################################################################
 def send_packet_to_server(q_unser_packets, config):
     """Sends the decoded packet to the server."""
-    name = config.get("fire_name", "Unnamed Fire")
-    flight_id = config.get("flight_id", -1)
-
+    name = "fire"
     if prog_mode != 0:
         print(f"SP: STARTING PROCESS")
 
