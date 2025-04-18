@@ -34,7 +34,7 @@ import os
 import random
 import csv
 from thermal_data import thermal_data
-from radio.packet_class._v4.packet import Packet, Packet_Info, Packet_Info_Dict
+from radio.packet_class._v4.packet import Packet, Packet_Info, Packet_Info_Dict, deserialize_pac
 import logging
 import logging.handlers
 import datetime
@@ -163,7 +163,7 @@ def data_processing(q2,q3):
 #                and then send the packet                              #                            
 #   Return: None                                                       #
 ########################################################################
-def create_packet(q3, q4):
+def create_packet(q3, q4, global_session_id):
     global pac_id_to_create
     pid = os.getpid()
     os.sched_setaffinity(pid, {3})
@@ -175,6 +175,7 @@ def create_packet(q3, q4):
             # Create a Packet object
             packet = Packet(
                 call_sign=CALL_SIGN,           # Necessary for operating radio within HAM radio freqs
+                session_id=global_session_id,  # Tells user the flight to tie the packet to
                 pac_id=pac_id_to_create,       # Pulled from global variable
                 gps_data=data.gps,             # GPS coordinates [latitude, longitude]
                 alt=data.barometric,           # Altitude in meters
@@ -269,17 +270,10 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
                 if prog_mode != 0:
                     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} RESENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-                    encoded_call_sign, pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<6sIffIhhq', ser_pac_to_send[:-4])
-                    sent_packet = Packet(
-                        call_sign=encoded_call_sign.rstrip(b'\x00').decode('utf-8'),
-                        pac_id=pac_id,
-                        gps_data=[lat, lon],
-                        alt=alt,
-                        high_temp=high_temp,
-                        low_temp=low_temp,
-                        time_stamp=time_stamp
-                    )
-                    print(sent_packet)
+                    pac_sent, pac_sent_checksum = deserialize_pac(ser_pac_to_send)
+                    print(pac_sent)
+                    print(f"checksum: {pac_sent_checksum}")
+                    print(f"Bytes sent: {len(ser_pac_to_send)}")
                 
                 # ---------------- #
                 # HANDSHAKE METHOD #
@@ -312,17 +306,10 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
                 if prog_mode != 0:
                     print(f"SP: PACKET {ser_pac_to_send_info.pac_id} SENT AT {ser_pac_to_send_info.get_timestamp()}")
 
-                    encoded_call_sign, pac_id, lat, lon, alt, high_temp, low_temp, time_stamp = struct.unpack('<6sIffIhhq', ser_pac_to_send[:-4])
-                    sent_packet = Packet(
-                        call_sign = encoded_call_sign.rstrip(b'\x00').decode('utf-8'),
-                        pac_id=pac_id,
-                        gps_data=[lat, lon],
-                        alt=alt,
-                        high_temp=high_temp,
-                        low_temp=low_temp,
-                        time_stamp=time_stamp
-                    )
-                    print(sent_packet)
+                    pac_sent, pac_sent_checksum = deserialize_pac(ser_pac_to_send)
+                    print(pac_sent)
+                    print(f"checksum: {pac_sent_checksum}")
+                    print(f"Bytes sent: {len(ser_pac_to_send)}")
                 
                 # ---------------- #
                 # HANDSHAKE METHOD #
@@ -468,9 +455,7 @@ def receive_and_decode(my_packet_info_dict, prog_mode, q4, q_log):
             # Unpack the payload and checksum
             ack_payload = data[:-4]  # setting to all but the sum . . . 
             received_checksum = struct.unpack('<I', data[-4:])[0] # and here we check that sum
-
             computed_checksum = zlib.crc32(ack_payload)
-
             if computed_checksum != received_checksum:
                 print(f"RD: Checksum mismatch! Packet corrupted. \\ COMPUTED:{computed_checksum}, RECEIVED: {received_checksum}")
                 continue
@@ -517,10 +502,9 @@ MyManager.register('Packet_Info_Dict', Packet_Info_Dict)
 #                transmissions for debugging and performance eval.     #
 #   Return: None                                                       #
 ########################################################################
-def get_flight_log_filename():
+def get_flight_log_filename(global_session_id):
     """Generate a unique filename for each flight log based on timestamp."""
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    return os.path.join(LOG_DIR, f"{timestamp}.csv")
+    return os.path.join(LOG_DIR, f"{global_session_id}.csv")
 
 def setup_csv_logger(csv_file):
     """Ensure CSV file has headers."""
@@ -590,6 +574,7 @@ if __name__ == '__main__':
                                     # 'forkserver' : good compromise of 'spawn' and 'fork' (only compatible with unix-based systems)
 
     prog_mode = 0
+    global_session_id = time.strftime("%Y-%m-%d %H:%M:%S")
     my_packet_info_dict = Packet_Info_Dict()
 
     parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
@@ -655,13 +640,13 @@ if __name__ == '__main__':
         # Initialize threads for processing and transmitting radio data
         if prog_mode != 0:
             print("TEST_MAIN 4")
+        p_logger_radio = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename(global_session_id)))
         p1 = mp.Process(target=data_structure_builder, args=(q1,q2,q5,))
         p2 = mp.Process(target=data_processing, args=(q2,q3,))
-        p3 = mp.Process(target=create_packet, args=(q3,q4,))
+        p3 = mp.Process(target=create_packet, args=(q3,q4,global_session_id))
         p4 = mp.Process(target=send_packet, args=(q4,my_packet_info_dict,prog_mode,q_log,))
         p5 = mp.Process(target=gps_sim, args=(q5,)) # sim flight queue
         p_recieve_packets = mp.Process(target=receive_and_decode, args=(my_packet_info_dict,prog_mode,q4,q_log,))
-        p_logger_radio = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename()))
 
         # Start threads
         if prog_mode != 0:

@@ -27,8 +27,9 @@ MAX_SEND_TIMEOUT_SEC = 1.0e10 # 10 Second timeout
 #                and then transmission to the GCS                      #
 ########################################################################
 class Packet:
-    def __init__(self, call_sign, pac_id, gps_data, alt, high_temp, low_temp, time_stamp):
+    def __init__(self, call_sign, session_id, pac_id, gps_data, alt, high_temp, low_temp, time_stamp):
         self.call_sign = call_sign
+        self.session_id = session_id
         self.pac_id = pac_id
         self.gps_data = gps_data # This should be a list of two floats, [lat, long]
         self.alt = alt # Altitude in meters
@@ -40,8 +41,9 @@ class Packet:
         # The format of the payload is as follows: int, float, float, int, short, short, long long
         # Updated to include 'q' to include the long long as a timestamp
         # '<' little endian encoded
-        payload = struct.pack('<6sIffIhhq', \
+        payload = struct.pack('<6s19sIffIhhq', \
             self.call_sign.encode('utf-8')[:6].ljust(6, b'\x00'), \
+            self.session_id.encode('utf-8')[:19].ljust(19, b'\x00'), \
             self.pac_id, \
             self.gps_data[0], \
             self.gps_data[1], \
@@ -60,9 +62,10 @@ class Packet:
         pass
 
     def __str__(self):
-        return f"         ======================\n \
+        return f"         =========================\n \
+        SESSION_ID {self.session_id}\n \
              PACKET #{self.pac_id}\n \
-        ======================\n \
+        =========================\n \
             CALL SIGN - {self.call_sign}\n \
             GPS COORDINATES - {self.gps_data}\n \
             ALTITUDE - {self.alt}\n \
@@ -70,6 +73,21 @@ class Packet:
             LOW TEMP - {self.low_temp}\n \
             TIME STAMP - {self.time_stamp}"
 
+
+def deserialize_pac(ser_pac):
+    encoded_call_sign, encoded_session_id, pac_id, lat, lon, alt, high_temp, low_temp, time_stamp, checksum = struct.unpack('<6s19sIffIhhqI', ser_pac)
+    deser_pac = Packet(
+        call_sign=encoded_call_sign.rstrip(b'\x00').decode('utf-8'),
+        session_id=encoded_session_id.rstrip(b'\x00').decode('utf-8'),
+        pac_id=pac_id,
+        gps_data=[lat, lon],
+        alt=alt,
+        high_temp=high_temp,
+        low_temp=low_temp,
+        time_stamp=time_stamp
+    )
+
+    return deser_pac, checksum
 
 
 ########################################################################

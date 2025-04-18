@@ -19,7 +19,7 @@ import socket # For UDP socket transmission in MODE 2
 import requests
 import argparse
 import multiprocessing as mp
-from packet_class._v4.packet import Packet
+from packet_class._v4.packet import Packet, deserialize_pac
 import time
 import os
 import csv
@@ -28,7 +28,7 @@ import numpy
 # ------------------ #
 # NETWORK MANAGEMENT #
 # ------------------ #
-PACKET_SIZE = 38 #32  # ADJUST?
+DAT_PACKET_SIZE = 57 #32  # ADJUST?
 REQ_PACKET_SIZE = (3 + 4) # String (of three letters) + integer size
 DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
@@ -100,7 +100,7 @@ def setup_csv_logger(csv_file):
     """Ensure CSV file has headers."""
     with open(csv_file, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["timestamp", "packet_id", "pac_type", "send(s)/receive(r)", "trans_type", "num_transmissions"])  # Define CSV headers
+        writer.writerow(["timestamp", "session_id", "packet_id", "pac_type", "send(s)/receive(r)", "trans_type", "num_transmissions"])  # Define CSV headers
 
 def radio_log_listener(log_queue, csv_file):
     """Process that listens for logs and writes them to CSV."""
@@ -119,13 +119,13 @@ def radio_log_listener(log_queue, csv_file):
                 if record is None:
                     break  # Stop listener when None is received
                 
-                writer.writerow([record["timestamp"], record["packet_id"], record["pac_type"], record["send(s)/receive(r)"], record["trans_type"], record["num_transmissions"]])
+                writer.writerow([record["timestamp"], record["session_id"], record["packet_id"], record["pac_type"], record["send(s)/receive(r)"], record["trans_type"], record["num_transmissions"]])
                 file.flush()  # Flush immediately to prevent data loss
             
             except Exception as e:
                 print("Logging error:", e)
 
-def log_trans_gcs(pac_id, pac_type, send_or_recieve, num_transmissions, q_log):
+def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissions, q_log):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
     # --- #
@@ -137,7 +137,7 @@ def log_trans_gcs(pac_id, pac_type, send_or_recieve, num_transmissions, q_log):
         trans_type = 'RF'
     else:
         trans_type = 'UDP'
-    q_log.put({"timestamp": timestamp, "packet_id": pac_id, "send(s)/receive(r)": send_or_recieve, "pac_type": pac_type, "trans_type": trans_type,  "num_transmissions": num_transmissions})
+    q_log.put({"timestamp": timestamp, "session_id": session_id, "packet_id": pac_id, "send(s)/receive(r)": send_or_recieve, "pac_type": pac_type, "trans_type": trans_type,  "num_transmissions": num_transmissions})
 
 
 
@@ -169,7 +169,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
             return
         
     # Dictionary for logging packet transmissions
-    data_pacs_received = {} # House the number of times a packet has been received
+    data_pacs_received = {} # {(SESSION_ID, PAC_ID) -> TIMES PACKET RECEIVED}
         
     # Program loop for receiving, deserializing, sending ACKs, and shipping
     # off packets to the send_packet_to_server() method
@@ -177,24 +177,23 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
         try:
             # Receive the data off the bus
             if prog_mode == 2:
-                data, addr = udp_socket.recvfrom(PACKET_SIZE)
+                data, addr = udp_socket.recvfrom(DAT_PACKET_SIZE)
                 print(f"Received packet from {addr}")
             # Read the serialized data from the RF module
             else:
-                data = rf_serial.read(PACKET_SIZE)
+                data = rf_serial.read(DAT_PACKET_SIZE)
 
             # Decode Packet info for debugging modes
             if prog_mode != 0:
                 print(f"\nPACKET LENGTH: {len(data)}")
                 print(f'PACKET RECEIVED: {data.hex()}')  # Print as hex for readability
-                if len(data) < PACKET_SIZE:
+                if len(data) != DAT_PACKET_SIZE:
                     print("Incomplete packet received, skipping...")
                     continue
 
             # Unpack the payload and checksum
             payload = data[:-4]  # setting to all but the sum . . . 
             received_checksum = struct.unpack('<I', data[-4:])[0] # and here we check that sum
-
             computed_checksum = zlib.crc32(payload)
 
             if computed_checksum != received_checksum:
@@ -202,42 +201,32 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
                 continue
 
             # DESERIALIZE THE PAYLOAD, PUT BACK INTO A PACKET
-            dat_encoded_call_sign, dat_pac_id, dat_lat, dat_lon, dat_alt, dat_high_temp, dat_low_temp, dat_time_stamp = struct.unpack('<6sIffIhhq', payload)
-
-            dat_packet = Packet(
-                call_sign=dat_encoded_call_sign.rstrip(b'\x00').decode('utf-8'),
-                pac_id=dat_pac_id,
-                gps_data=[dat_lat, dat_lon],
-                alt=dat_alt,
-                high_temp=dat_high_temp,
-                low_temp=dat_low_temp,
-                time_stamp=dat_time_stamp
-            )
+            dat_pac, dat_checksum = deserialize_pac(data)
 
             # Print the decoded packet
             if prog_mode != 0:
-                print(dat_packet)
+                print(dat_pac)
 
             # Has the DAT Packet already been received?
-            if dat_pac_id in data_pacs_received:
-                data_pacs_received[dat_pac_id] = data_pacs_received[dat_pac_id] + 1
+            if (dat_pac.session_id, dat_pac.pac_id) in data_pacs_received:
+                data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] = data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] + 1
                 if prog_mode != 0:
-                    print(f"RD: DAT Packet ID {dat_pac_id} already has been received {data_pacs_received.get(dat_pac_id)} times!")
+                    print(f"RD: DAT Pac SESSION_ID {dat_pac.session_id}, PAC_ID {dat_pac.pac_id} has been received {data_pacs_received.get((dat_pac.session_id, dat_pac.pac_id))} times!")
             else:
-                q_unser_packets.put(dat_packet)
-                data_pacs_received[dat_pac_id] = 1
+                q_unser_packets.put(dat_pac)
+                data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] = 1
                 if prog_mode != 0:
-                    print(f"RD: DAT Packet ID {dat_pac_id} has been received for the first time")
+                    print(f"RD: DAT Pac SESSION_ID {dat_pac.session_id}, PAC_ID {dat_pac.pac_id} has been received {data_pacs_received.get((dat_pac.session_id, dat_pac.pac_id))} for the first time.")
 
             # Log/Acknowledge Recipient
             if prog_mode != 0:
-                print(f"RD: Packet ID {dat_pac_id} unpacked!")
-            log_trans_gcs(dat_pac_id, "DAT", "r", data_pacs_received[dat_pac_id], q_log)
+                print(f"RD: Packet ID {dat_pac.pac_id} unpacked!")
+            log_trans_gcs(dat_pac.session_id, dat_pac.pac_id, "DAT", "r", data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)], q_log)
 
             # ---------------- #
             # HANDSHAKE METHOD #
             # ---------------- #
-            ack_payload = struct.pack('<6s3sI', CALL_SIGN.encode('utf-8')[:6].ljust(6, b'\x00'), b"ACK", dat_pac_id)
+            ack_payload = struct.pack('<6s3sI', CALL_SIGN.encode('utf-8')[:6].ljust(6, b'\x00'), b"ACK", dat_pac.pac_id)
             ack_checksum = zlib.crc32(ack_payload)
 
             ack_serialized_data = ack_payload + struct.pack('<I', ack_checksum)  # Append checksum as unsigned int
@@ -246,11 +235,11 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
                 rf_serial.write(ack_serialized_data)
             else:
                 udp_socket.sendto(ack_serialized_data, DRONE_ADDRESS)
-                print(f"RD: ACK for ID {dat_pac_id} sent to {DRONE_ADDRESS}")
+                print(f"RD: ACK for ID {dat_pac.pac_id} sent to {DRONE_ADDRESS}")
                 print(f"RD: ACK packet length: {len(ack_serialized_data)}")
 
             # Log
-            log_trans_gcs(dat_pac_id, "ACK", "s", 1, q_log)
+            log_trans_gcs(dat_pac.session_id, dat_pac.pac_id, "ACK", "s", 1, q_log)
 
         except struct.error as e:
             print(f"RD: Error decoding packet: {e}")
