@@ -1,0 +1,16 @@
+
+drone/myenv/
+
+gcs/trans_logs/
+
+drone/trans_logs/
+
+drone/__pycache__/
+
+drone/radio/packet_class/_v4/__pycache__/
+
+gcs/packet_class/_v4/__pycache__/
+
+for testing/__pycache__/
+
+drone/radio/packet_class/__pycache__/
