@@ -126,10 +126,11 @@ def sync_to_firebase():
 
     conn.close()
 
-def process_packet(packet, name, flight_id, status="active"):
+def process_packet(packet, name, status="active"):
     try:
         ns24h = 24 * 60 * 60 * 1_000_000_000 
         pac_id = packet.get("pac_id", -1)
+        flight_id = packet.get("session_id", -1)
         gps_data = packet.get("gps_data", [0.0, 0.0])
         latitude, longitude = gps_data[0], gps_data[1]
         alt = packet.get("alt", 0.0)
