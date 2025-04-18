@@ -25,7 +25,16 @@ import os
 import csv
 import numpy
 from database import process_packet
-from backend_server import config
+#from backend_server import config
+# FOR DESKAPP
+import sys
+import os
+import subprocess
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
+                             QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit)
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 # ------------------ #
 # NETWORK MANAGEMENT #
@@ -36,6 +45,8 @@ DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 rf_serial = None
 CALL_SIGN = "KK72PA"
+WRAPAROUND_THRESHOLD = 200
+MAX_PACKET_ID = 2147483647
 
 # --------------- #
 # LOGS MANAGEMENT #
@@ -54,9 +65,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 ########################################################################
 def send_packet_to_server(q_unser_packets, config):
     """Sends the decoded packet to the server."""
-    name = config.get("fire_name", "Unnamed Fire")
-    flight_id = config.get("flight_id", -1)
-
+    name = "fire"
     if prog_mode != 0:
         print(f"SP: STARTING PROCESS")
 
@@ -141,6 +150,8 @@ def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissio
 
 
 
+
+
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #
 #   Author: Robb Northrup                                              #
@@ -170,6 +181,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
         
     # Dictionary for logging packet transmissions
     data_pacs_received = {} # {(SESSION_ID, PAC_ID) -> TIMES PACKET RECEIVED}
+    highest_pac_id_received = {} # per session_id
         
     # Program loop for receiving, deserializing, sending ACKs, and shipping
     # off packets to the send_packet_to_server() method
@@ -207,16 +219,80 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
             if prog_mode != 0:
                 print(dat_pac)
 
-            # Has the DAT Packet already been received?
-            if (dat_pac.session_id, dat_pac.pac_id) in data_pacs_received:
-                data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] = data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] + 1
-                if prog_mode != 0:
-                    print(f"RD: DAT Pac SESSION_ID {dat_pac.session_id}, PAC_ID {dat_pac.pac_id} has been received {data_pacs_received.get((dat_pac.session_id, dat_pac.pac_id))} times!")
-            else:
+
+            # HAS PACKET BEEN RECIEVED?
+            key = (dat_pac.session_id, dat_pac.pac_id)
+            current_id = dat_pac.pac_id
+            session = dat_pac.session_id
+
+            # Initialize session
+            if session not in highest_pac_id_received:
+                highest_pac_id_received[session] = current_id
+                data_pacs_received[key] = 1
                 q_unser_packets.put(dat_pac)
-                data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] = 1
                 if prog_mode != 0:
-                    print(f"RD: DAT Pac SESSION_ID {dat_pac.session_id}, PAC_ID {dat_pac.pac_id} has been received {data_pacs_received.get((dat_pac.session_id, dat_pac.pac_id))} for the first time.")
+                    print(f"RD: New session {session}. Accepted first PAC_ID {current_id}.")
+
+            else:
+                highest_id = highest_pac_id_received[session]
+
+                is_wraparound = (
+                    highest_id > MAX_PACKET_ID - WRAPAROUND_THRESHOLD and
+                    current_id < WRAPAROUND_THRESHOLD
+                )
+
+                is_new_packet = (
+                    current_id > highest_id or
+                    is_wraparound
+                )
+
+                if is_new_packet:
+                    # Accept the new packet
+                    q_unser_packets.put(dat_pac)
+                    data_pacs_received[key] = 1
+                    highest_pac_id_received[session] = current_id
+                    if prog_mode != 0:
+                        if is_wraparound:
+                            print(f"RD: Wraparound detected. Accepted PAC_ID {current_id} in session {session}.")
+                        else:
+                            print(f"RD: Accepted new PAC_ID {current_id} in session {session}.")
+
+                elif key not in data_pacs_received:
+                    # Accept old but unseen packet (e.g., out-of-order)
+                    q_unser_packets.put(dat_pac)
+                    data_pacs_received[key] = 1
+                    if prog_mode != 0:
+                        print(f"RD: Late/out-of-order PAC_ID {current_id} accepted for session {session}.")
+
+                else:
+                    # True duplicate
+                    data_pacs_received[key] += 1
+                    if prog_mode != 0:
+                        print(f"RD: Duplicate PAC_ID {current_id} in session {session} received {data_pacs_received[key]} times.")
+
+
+
+            # # Has the DAT Packet already been received?
+            # if (dat_pac.session_id, dat_pac.pac_id) in data_pacs_received:
+            #     # Outside Wraparound Thresh . . .
+            #     if (highest_pac_id_received[dat_pac.session_id] - WRAPAROUND_THRESHOLD) > dat_pac.pac_id:
+            #         q_unser_packets.put(dat_pac)
+            #         data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] = 1
+            #         if prog_mode != 0:
+            #             print(f"RD: DAT Pac SESSION_ID {dat_pac.session_id}, PAC_ID {dat_pac.pac_id} has been received {data_pacs_received.get((dat_pac.session_id, dat_pac.pac_id))} for the first time.")
+            #     # Dat already recieved . . .
+            #     else:
+            #         data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] = data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] + 1
+            #         if highest_pac_id_received[dat_pac.session_id] < dat_pac.pac_id:
+            #             highest_pac_id_received[dat_pac.session_id] = dat_pac.pac_id
+            #         if prog_mode != 0:
+            #             print(f"RD: DAT Pac SESSION_ID {dat_pac.session_id}, PAC_ID {dat_pac.pac_id} has been received {data_pacs_received.get((dat_pac.session_id, dat_pac.pac_id))} times!")
+            # # Packet Id is completely new . . .
+            # else:
+            #     q_unser_packets.put(dat_pac)
+            #     data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)] = 1
+            #     if prog_mode != 0:
+            #         print(f"RD: DAT Pac SESSION_ID {dat_pac.session_id}, PAC_ID {dat_pac.pac_id} has been received {data_pacs_received.get((dat_pac.session_id, dat_pac.pac_id))} for the first time.")
 
             # Log/Acknowledge Recipient
             if prog_mode != 0:
