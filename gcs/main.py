@@ -24,6 +24,17 @@ import time
 import os
 import csv
 import numpy
+from database import process_packet
+#from backend_server import config
+# FOR DESKAPP
+import sys
+import os
+import subprocess
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
+                             QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit)
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 # ------------------ #
 # NETWORK MANAGEMENT #
@@ -54,10 +65,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 ########################################################################
 def send_packet_to_server(q_unser_packets):
     """Sends the decoded packet to the server."""
+    name = "fire"
     if prog_mode != 0:
         print(f"SP: STARTING PROCESS")
-
-    server_url = "http://localhost:8000/add_packet"  # Current Server Location
 
     while True:
         if not q_unser_packets.empty():
@@ -70,14 +80,11 @@ def send_packet_to_server(q_unser_packets):
                     "alt": packet.alt,
                     "high_temp": packet.high_temp,
                     "low_temp": packet.low_temp,
-                    "time_stamp": packet.time_stamp
+                    "time_stamp": packet.time_stamp,
+                    "session_id": packet.session_id
                 }
 
-                response = requests.post(server_url, json=packet_data)
-                if response.status_code == 200:
-                    print("Packet successfully sent to server.")
-                else:
-                    print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
+                process_packet(packet_data, name, "active")
             except requests.RequestException as e:
                 print(f"Error connecting to the server: {e}")
         else:

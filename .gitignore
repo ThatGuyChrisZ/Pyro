@@ -14,3 +14,9 @@ gcs/packet_class/_v4/__pycache__/
 for testing/__pycache__/
 
 drone/radio/packet_class/__pycache__/
+
+gcs/__pycache__/
+
+gcs/robbenv/
+
+gcs/firebase_credentials.json
