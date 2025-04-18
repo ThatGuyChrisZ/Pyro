@@ -25,7 +25,15 @@ import os
 import csv
 import numpy
 from database import process_packet
-from backend_server import config
+# FOR DESKAPP
+import sys
+import os
+import subprocess
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
+                             QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit)
+from PyQt5.QtGui import QPixmap, QIcon
+from PyQt5.QtCore import QTimer, Qt, QUrl
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 # ------------------ #
 # NETWORK MANAGEMENT #
@@ -54,11 +62,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 #   Description:                                                       #
 #   Return:                                                            #
 ########################################################################
-def send_packet_to_server(q_unser_packets, config):
+def send_packet_to_server(q_unser_packets):
     """Sends the decoded packet to the server."""
-    name = config.get("fire_name", "Unnamed Fire")
-    flight_id = config.get("flight_id", -1)
-
+    name = "fire"
     if prog_mode != 0:
         print(f"SP: STARTING PROCESS")
 
@@ -373,7 +379,7 @@ if __name__ == '__main__':
 
     p_rad_log_listener = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename(),))
     p_rec_and_dec = mp.Process(target=receive_and_decode_packets, args=(prog_mode, usb_port_trans, q_unser_packets, q_log,))
-    p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets, config,))
+    p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets,))
 
     p_rad_log_listener.start()
     p_rec_and_dec.start()
