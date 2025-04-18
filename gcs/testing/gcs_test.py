@@ -15,7 +15,7 @@ DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
 UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
 
 # Test Packet Data
-TEST_PACKET_ID = 9999
+TEST_PACKET_ID = 6666
 TEST_PACKET = {
     "pac_id": TEST_PACKET_ID,
     "gps_data": [39.5296, -119.8138],
