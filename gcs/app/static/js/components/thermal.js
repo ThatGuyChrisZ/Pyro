@@ -25,11 +25,14 @@ class ThermalOverlay {
     });
   }
 
-  async loadThermalData(name, time_stamp = null) {
+  async loadThermalData(name, time_stamp = null, flight_id = null) {
     try {
       let url = `/api/thermal/${encodeURIComponent(name)}`;
-      if (time_stamp) {
-        url += `?time_stamp=${encodeURIComponent(time_stamp)}`;
+      if (time_stamp || flight_id) {
+        const params = new URLSearchParams();
+        if (time_stamp) params.append("time_stamp", time_stamp);
+        if (flight_id) params.append("flight_id", flight_id);
+        url += "?" + params.toString();
       }
 
       const response = await fetch(url);

@@ -24,6 +24,8 @@ import time
 import os
 import csv
 import numpy
+from database import process_packet
+from backend_server import config
 
 # ------------------ #
 # NETWORK MANAGEMENT #
@@ -52,12 +54,13 @@ os.makedirs(LOG_DIR, exist_ok=True)
 #   Description:                                                       #
 #   Return:                                                            #
 ########################################################################
-def send_packet_to_server(q_unser_packets):
+def send_packet_to_server(q_unser_packets, config):
     """Sends the decoded packet to the server."""
+    name = config.get("fire_name", "Unnamed Fire")
+    flight_id = config.get("flight_id", -1)
+
     if prog_mode != 0:
         print(f"SP: STARTING PROCESS")
-
-    server_url = "http://localhost:8000/add_packet"  # Current Server Location
 
     while True:
         if not q_unser_packets.empty():
@@ -70,14 +73,11 @@ def send_packet_to_server(q_unser_packets):
                     "alt": packet.alt,
                     "high_temp": packet.high_temp,
                     "low_temp": packet.low_temp,
-                    "time_stamp": packet.time_stamp
+                    "time_stamp": packet.time_stamp,
+                    "session_id": packet.session_id
                 }
 
-                response = requests.post(server_url, json=packet_data)
-                if response.status_code == 200:
-                    print("Packet successfully sent to server.")
-                else:
-                    print(f"Failed to send packet to server. Status code: {response.status_code}, Response: {response.text}")
+                process_packet(packet_data, name, "active")
             except requests.RequestException as e:
                 print(f"Error connecting to the server: {e}")
         else:
@@ -373,7 +373,7 @@ if __name__ == '__main__':
 
     p_rad_log_listener = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename(),))
     p_rec_and_dec = mp.Process(target=receive_and_decode_packets, args=(prog_mode, usb_port_trans, q_unser_packets, q_log,))
-    p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets,))
+    p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets, config,))
 
     p_rad_log_listener.start()
     p_rec_and_dec.start()

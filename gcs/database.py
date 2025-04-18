@@ -126,10 +126,11 @@ def sync_to_firebase():
 
     conn.close()
 
-def process_packet(packet, name, flight_id, status="active"):
+def process_packet(packet, name, status="active"):
     try:
         ns24h = 24 * 60 * 60 * 1_000_000_000 
         pac_id = packet.get("pac_id", -1)
+        flight_id = packet.get("session_id", -1)
         gps_data = packet.get("gps_data", [0.0, 0.0])
         latitude, longitude = gps_data[0], gps_data[1]
         alt = packet.get("alt", 0.0)
@@ -427,50 +428,57 @@ def get_nearest_city(latitude: float, longitude: float) -> str:
     except Exception as e:
         print(f"Error getting nearest city: {e}")
         return "Unknown Location"
-
-    
+  
 def update_mission_data(export):
     mission_time = export.get("time_stamp")
-    gps_lat = export.get("latitude", 0.0)
-    gps_lon = export.get("longitude", 0.0)
+    gps_lat = export.get("latitude", 0.0) / 1e6
+    gps_lon = export.get("longitude", 0.0) / 1e6
     alt = export.get("altitude", 0.0)
     heading = export.get("heading", 0.0)
     speed = export.get("speed", 0.0)
 
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
+
     try:
-        # Find the record with the closest time_stamp
+        # Get all wildfire records after this time that don't yet have mission data
         select_query = """
-            SELECT id, time_stamp FROM wildfires
-            ORDER BY ABS(time_stamp - ?) ASC LIMIT 1
+            SELECT id FROM wildfires
+            WHERE time_stamp >= ?
+              AND (heading IS NULL OR speed IS NULL OR latitude IS NULL OR longitude IS NULL OR alt IS NULL)
+            ORDER BY time_stamp ASC
         """
         cursor.execute(select_query, (mission_time,))
-        result = cursor.fetchone()
-        
-        if result is None:
-            print("No wildfire record found to update mission data.")
-        else:
-            record_id, record_time = result
-            update_query = """
-                UPDATE wildfires
-                SET 
-                    heading = ?,
-                    speed = ?,
-                    sync_status = 'pending'
-                WHERE id = ?
-            """
-            cursor.execute(update_query, (heading, speed, record_id))
-            conn.commit()
-            if cursor.rowcount == 0:
-                print("❌ No wildfire record updated.")
-            else:
-                print(f"✅ Wildfire record updated with mission data (record id: {record_id}).")            
-                sync_to_firebase
+        rows_to_update = cursor.fetchall()
+
+        if not rows_to_update:
+            print("No wildfire records found to update mission data.")
+            return
+
+        update_query = """
+            UPDATE wildfires
+            SET 
+                heading = ?,
+                speed = ?,
+                latitude = ?,
+                longitude = ?,
+                alt = ?,
+                sync_status = 'pending'
+            WHERE id = ?
+        """
+
+        for row in rows_to_update: 
+            record_id = row[0]
+            cursor.execute(update_query, (heading, speed, gps_lat, gps_lon, alt, record_id))
+
+        conn.commit()
+        print(f"✅ Updated mission data to {len(rows_to_update)} wildfire records.")
+
     except Exception as e:
-        print(f"Error updating mission data: {e}")
+        print(f"❌ Error updating mission data: {e}")
     finally:
         conn.close()
+
 
 # Flight_id / Ulog Database
 def init_flights_db():

@@ -40,7 +40,8 @@ function computeMetrics(data) {
 
 function createFlightCard(flight, metrics) {
     const card = document.createElement('div');
-    card.className = 'card mb-3';
+    card.className = 'card mb-3 card-hover';
+    card.style.cursor = 'pointer';
 
     const body = document.createElement('div');
     body.className = 'card-body';
@@ -63,6 +64,11 @@ function createFlightCard(flight, metrics) {
     body.appendChild(subtitle);
     body.appendChild(stats);
     card.appendChild(body);
+
+    card.addEventListener('click', () => {
+        const url = `/flight_details?name=${encodeURIComponent(flight.name)}&flight_id=${flight.flight_id}`;
+        window.location.href = url;
+    });
 
     return card;
 }

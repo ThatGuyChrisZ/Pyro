@@ -297,8 +297,9 @@ class ThermalDataHandler(BaseHandler):
         try:
             cursor = self.db.cursor()
 
-            # Get optional timestamp parameter
+            # Get optional timestamp and flight_id parameters
             time_param = self.get_argument("time_stamp", None)
+            flight_id = self.get_argument("flight_id", None)
 
             query = """
                 SELECT 
@@ -316,12 +317,15 @@ class ThermalDataHandler(BaseHandler):
             """
             params = [name]
 
+            if flight_id:
+                query += " AND flight_id = ?"
+                params.append(int(flight_id))
+
             if time_param:
                 dt = datetime.fromisoformat(time_param.replace("Z", "+00:00"))
                 time_ns = int(dt.timestamp() * 1_000_000_000)
-                query += " AND time_stamp <= ?" 
+                query += " AND time_stamp <= ?"
                 params.append(time_ns)
-
 
             query += " ORDER BY time_stamp ASC"
             cursor.execute(query, params)
@@ -335,17 +339,17 @@ class ThermalDataHandler(BaseHandler):
             import traceback
             logging.error(f"ThermalDataHandler Error: {str(e)}\n{traceback.format_exc()}")
             self.set_status(500)
-            self.set_header("Content-Type", "application/json")
             self.write(json.dumps({ "error": "Failed to fetch thermal data" }))
 
-
 class FlightDataHandler(BaseHandler):
-    def get(self, flight_id=None):
-        """API endpoint to get flight data"""
+    def get(self, flight_name=None):
+        """API endpoint to get flight data for a specific fire and flight ID"""
         try:
             cursor = self.db.cursor()
-            
-            if flight_id:
+            flight_id = self.get_argument("flight_id", None)
+
+            if flight_id and flight_name:
+                # Get one specific flight matching both fire name and ID
                 query = """
                     SELECT 
                         flight_id,
@@ -354,15 +358,15 @@ class FlightDataHandler(BaseHandler):
                         time_started,
                         time_ended
                     FROM flights
-                    WHERE flight_id = ?
+                    WHERE name = ? AND flight_id = ?
                 """
-                cursor.execute(query, [flight_id])
+                cursor.execute(query, [flight_name, int(flight_id)])
                 flight_data = cursor.fetchone()
-                
+
                 if flight_data:
                     flight = dict(flight_data)
-                    
-                    # Get associated wildfire data for a flight
+
+                    # Get associated wildfire data
                     path_query = """
                         SELECT 
                             id,
@@ -374,19 +378,19 @@ class FlightDataHandler(BaseHandler):
                             low_temp,
                             time_stamp
                         FROM wildfires
-                        WHERE flight_id = ?
+                        WHERE name = ? AND flight_id = ?
                         ORDER BY time_stamp
                     """
-                    cursor.execute(path_query, [flight_id])
-                    path_data = [dict(row) for row in cursor.fetchall()]
-                    flight['wildfire_data'] = path_data
-                    
+                    cursor.execute(path_query, [flight_name, int(flight_id)])
+                    flight["wildfire_data"] = [dict(row) for row in cursor.fetchall()]
+
                     self.write(json.dumps(flight))
                 else:
                     self.set_status(404)
-                    self.write({"error": "Flight not found"})
+                    self.write({ "error": "Flight not found" })
+
             else:
-                # Get list of all flights
+                # Return all flights (optional filtering with timestamps)
                 query = """
                     SELECT 
                         flight_id,
@@ -398,27 +402,30 @@ class FlightDataHandler(BaseHandler):
                     WHERE 1=1
                 """
                 params = []
-                
+
                 time_from = self.get_argument('time_from', None)
                 time_to = self.get_argument('time_to', None)
-                
+
                 if time_from:
                     query += " AND time_started >= ?"
                     params.append(float(time_from))
-                    
+
                 if time_to:
                     query += " AND time_started <= ?"
                     params.append(float(time_to))
-                    
+
                 cursor.execute(query, params)
                 flights = [dict(row) for row in cursor.fetchall()]
-                
                 self.write(json.dumps(flights))
-                
+
         except Exception as e:
             logging.error(f"Error fetching flight data: {str(e)}")
             self.set_status(500)
-            self.write({"error": "Failed to fetch flight data"})
+            self.write({ "error": "Failed to fetch flight data" })
+
+class FlightDetailsHandler(BaseHandler):
+    def get(self):
+        self.render("flight_details.html")
 
 class LiveDataWebSocketHandler(tornado.websocket.WebSocketHandler):
     """WebSocket handler for real-time data updates"""
@@ -521,6 +528,7 @@ def make_app():
         (r"/data", DataHandler),
         (r"/about", AboutHandler),
         (r"/fire_details", FireDetailsHandler),
+        (r"/flight_details", FlightDetailsHandler),
         
         # API routes
         (r"/heatmap_data", HeatmapDataHandler),
@@ -535,6 +543,7 @@ def make_app():
         (r"/api/thermal/([^/]+)", ThermalDataHandler),
         (r"/api/flights", FlightDataHandler),
         (r"/api/flights/(\d+)", FlightDataHandler),
+        (r"/api/flights/(.*)", FlightDataHandler),
         
         # WebSocket route for live data
         (r"/ws/live", LiveDataWebSocketHandler),
