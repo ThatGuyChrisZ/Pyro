@@ -143,6 +143,8 @@ def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissio
 
 
 
+
+
 ########################################################################
 #   Function Name: receive_and_decode_packets()                        #
 #   Author: Robb Northrup                                              #
