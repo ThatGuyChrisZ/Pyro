@@ -563,7 +563,7 @@ def import_packets_from_file(file_path):
                 try:
                     packet_data = json.loads(line.strip())
                     name = packet_data.get("name", "Unnamed Fire")
-                    process_packet(packet_data, name, 1, "active")
+                    process_packet(packet_data, name, "active")
                 except json.JSONDecodeError as e:
                     print(f"Error decoding packet: {e}")
                 except Exception as e:
