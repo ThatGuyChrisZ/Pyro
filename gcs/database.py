@@ -45,7 +45,7 @@ def init_db():
             time_stamp REAL,
             heading REAL,
             speed REAL,
-            flight_id INTEGER NOT NULL DEFAULT -1
+            flight_id STRING
         )
         """
     )

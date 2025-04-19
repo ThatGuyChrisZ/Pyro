@@ -101,7 +101,7 @@ def send_packet_to_server(q_unser_packets):
 ########################################################################
 def get_flight_log_filename():
     """Generate a unique filename for each flight log based on timestamp."""
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = time.strftime("%Y-%m-%d %H-%M-%S")
     return os.path.join(LOG_DIR, f"{timestamp}.csv")
 
 def setup_csv_logger(csv_file):
@@ -192,6 +192,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
                 print(f"Received packet from {addr}")
             # Read the serialized data from the RF module
             else:
+                rf_serial = serial.Serial(port='COM'+rf_serial_usb_port, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10)
                 data = rf_serial.read(DAT_PACKET_SIZE)
 
             # Decode Packet info for debugging modes
@@ -331,7 +332,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
 #   Return: None                                                       #
 ########################################################################
 if __name__ == '__main__':
-    mp.set_start_method('fork')    # 'spawn' : for windows deployment (and safe on linux)
+    mp.set_start_method('spawn')    # 'spawn' : for windows deployment (and safe on linux)
                                     #           + safer for I/O bound and thread-sensitive tasks
                                     #           + safer with multithreading and c-extension libaries
                                     #           + avoids unpredictable behavior of 'fork with shared objects
@@ -363,7 +364,8 @@ if __name__ == '__main__':
                 quit()
             else:
                 try:
-                    rf_serial = serial.Serial(port='/dev/ttyUSB'+usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+                    rf_serial = serial.Serial(port='COM'+usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+                    rf_serial.close()
                 except serial.SerialException as e:
                     print(f"MAIN: ERROR CONNECTING TO TRANSCIEVER ON PORT \'/dev/ttyUSB{usb_port_trans}\', PLEASE TRY AGAIN . . .")
                     successfully_connect_to_transciever = False

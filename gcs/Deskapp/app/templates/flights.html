@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Flights Overview{% end %}
+
+{% block extra_css %}
+<style>
+  .fire-section {
+    margin-bottom: 30px;
+  }
+
+  .fire-title {
+    font-weight: bold;
+    font-size: 1.25rem;
+    margin-bottom: 10px;
+  }
+
+  .flight-list {
+    margin-left: 20px;
+  }
+
+  .flight-date {
+    font-weight: 600;
+    margin-top: 10px;
+  }
+
+  .flight-item {
+    cursor: pointer;
+    padding: 4px 10px;
+    margin: 2px 0;
+    border-radius: 4px;
+    background-color: #f1f1f1;
+  }
+
+  .flight-item:hover {
+    background-color: #e0e0e0;
+  }
+</style>
+{% end %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Flight History</h2>
+
+  <div class="mb-3">
+    <input type="text" id="search-fire" class="form-control" placeholder="Search fire name...">
+  </div>
+
+  <div id="flights-container"></div>
+</div>
+{% end %}
+
+{% block extra_js %}
+<script src="{{ static_url('js/pages/flights.js') }}" type="module"></script>
+{% end %}
