@@ -516,6 +516,113 @@ class TestHandler(BaseHandler):
     def get(self):
         self.render("test.html")
 
+class WildfireStatusHandler(BaseHandler):
+    def get(self):
+        name        = self.get_argument("name", None)
+        filter_type = self.get_argument("filter", "active")
+        cursor      = self.db.cursor()
+
+        if name:
+            query = """
+                SELECT
+                    id,
+                    time_stamp,
+                    size,
+                    flights,
+                    intensity,
+                    max_temp,
+                    min_temp,
+                    alt_avg,
+                    avg_latitude,
+                    avg_longitude,
+                    num_data_points,
+                    first_time_stamp,
+                    status,
+                    last_flight_id
+                FROM wildfire_status
+                WHERE name = ?
+                ORDER BY time_stamp ASC
+            """
+            cursor.execute(query, (name,))
+            rows = cursor.fetchall()
+
+            data = []
+            for row in rows:
+                raw_ts       = row["time_stamp"]
+                raw_first_ts = row["first_time_stamp"]
+
+                ts = datetime.fromtimestamp(raw_ts / 1e9).isoformat()
+                first_ts = (
+                    datetime.fromtimestamp(raw_first_ts / 1e9).isoformat()
+                    if raw_first_ts else None
+                )
+
+                data.append({
+                    "id":               row["id"],
+                    "time_stamp":       ts,
+                    "first_time_stamp": first_ts,
+                    "size":             row["size"],
+                    "flights":          row["flights"],
+                    "intensity":        row["intensity"],
+                    "max_temp":         row["max_temp"],
+                    "min_temp":         row["min_temp"],
+                    "alt_avg":          row["alt_avg"],
+                    "avg_latitude":     row["avg_latitude"],
+                    "avg_longitude":    row["avg_longitude"],
+                    "num_data_points":  row["num_data_points"],
+                    "status":           row["status"],
+                    "last_flight_id":   row["last_flight_id"]
+                })
+
+            self.set_header("Content-Type", "application/json")
+            return self.write(json.dumps(data))
+        
+        subquery = """
+            SELECT name, MAX(time_stamp) AS max_time_stamp
+            FROM wildfire_status
+            WHERE 1=1
+        """
+        params = []
+        if filter_type == "active":
+            subquery += " AND status = ?"
+            params.append("active")
+        elif filter_type == "archived":
+            subquery += " AND status = ?"
+            params.append("archived")
+
+        subquery += " GROUP BY name"
+
+        query = f"""
+            SELECT 
+                ws.id,
+                ws.name, 
+                ws.location,
+                ws.size,
+                ws.intensity,
+                ws.alt_avg,
+                ws.status,
+                ws.max_temp,
+                ws.min_temp,
+                ws.avg_latitude,
+                ws.avg_longitude,
+                ws.flights,
+                ws.num_data_points,
+                ws.first_time_stamp, 
+                ws.time_stamp,
+                ws.last_flight_id
+            FROM wildfire_status ws
+            JOIN ({subquery}) latest 
+              ON ws.name = latest.name 
+             AND ws.time_stamp = latest.max_time_stamp
+            ORDER BY ws.time_stamp DESC
+        """
+
+        cursor.execute(query, params)
+        fires = [dict(row) for row in cursor.fetchall()]
+
+        self.set_header("Content-Type", "application/json")
+        self.write(json.dumps(fires))
+
 def make_app():
     static_path = os.path.join(os.path.dirname(__file__), "app/static")
     template_path = os.path.join(os.path.dirname(__file__), "app/templates")
@@ -544,6 +651,7 @@ def make_app():
         (r"/api/flights", FlightDataHandler),
         (r"/api/flights/(\d+)", FlightDataHandler),
         (r"/api/flights/(.*)", FlightDataHandler),
+        (r"/api/fire_status", WildfireStatusHandler),
         
         # WebSocket route for live data
         (r"/ws/live", LiveDataWebSocketHandler),

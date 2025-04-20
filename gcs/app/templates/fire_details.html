@@ -3,12 +3,31 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
 <style>
+  .navbar {
+    position: sticky;
+    top: 0;
+    z-index: 2000 !important;
+  }
+  
+  .map-container {
+    position: relative;
+  }
+
   #map {
     height: 600px;
     width: 100%;
     border-radius: 6px;
     margin-top: 15px;
   }
+
+  .map-view-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1100;
+    margin-top: -40px;
+  }
+
   .legend {
     position: absolute;
     bottom: 20px;
@@ -26,9 +45,7 @@
     margin: 5px 0;
     background: linear-gradient(to right, blue, lime, yellow, orange, red);
   }
-  .map-container {
-    position: relative;
-  }
+
   #weather-sidebar {
     position: absolute;
     right: 0;
@@ -63,19 +80,39 @@
     border-radius: 8px;
     display: none;
   }
+
   #timeline-container {
     margin-top: 30px;
+  }
+
+  .chart-container {
+    width: 100%;
+    height: 250px;
+    margin-top: 40px;
+    position: relative;
+  }
+
+  .chart-container svg {
+    width: 100%;
+    height: 100%;
   }
 </style>
 {% end %}
 
 {% block content %}
 <div class="container mt-4">
-  <h2 id="fire-title" class="text-center">Fire Details</h2>
+  <h2 id="fire-title" class="text-center mb-3"></h2>
 
   <div class="map-container">
-    <div id="map"></div>
-    <div class="legend">
+    <!-- Map / Satellite toggle buttons -->
+    <div class="map-view-toggle btn-group" role="group" aria-label="Map view selector">
+      <button id="btnMapView" type="button" class="btn btn-sm btn-outline-secondary active">Map</button>
+      <button id="btnSatelliteView" type="button" class="btn btn-sm btn-outline-secondary">Satellite</button>
+    </div>
+
+    <div id="map" role="application" aria-label="Wildfire heatmap"></div>
+
+    <div class="legend" role="region" aria-label="Temperature legend">
       <strong>Temperature Key (°C):</strong>
       <div class="color-bar"></div>
       <div class="d-flex justify-content-between">
@@ -84,22 +121,52 @@
       </div>
     </div>
 
-    <div id="weather-sidebar">
-      <h2>Current Weather</h2>
+    <div id="weather-sidebar" role="complementary" aria-labelledby="weather-heading">
+      <h2 id="weather-heading">Current Weather</h2>
       <div class="weather-content">
         <div class="weather-info">
-          <p id="weather-description">Loading...</p>
-          <p><strong>Temperature:</strong> <span id="weather-temperature">-</span>°C</p>
+          <p id="weather-description" aria-live="polite">Loading...</p>
+          <p><strong>Temperature:</strong> <span id="weather-temperature">-</span>°F</p>
           <p><strong>Humidity:</strong> <span id="weather-humidity">-</span>%</p>
           <p><strong>Wind Speed:</strong> <span id="weather-wind">-</span> m/s</p>
         </div>
-        <img id="weather-image" alt="Weather image">
+        <img id="weather-image" alt="Weather image" />
       </div>
-      <button id="refresh-weather">Refresh Weather</button>
+    </div>
+  </div>
+
+  <!-- timeline scope selector -->
+  <div class="d-flex justify-content-center my-4 timeline-scope-selector" role="group" aria-label="Select timeline scope">
+    <div class="btn-group" role="group" aria-label="Select timeline scope">
+      <button type="button" class="btn btn-outline-secondary active" data-scope="6-hours" aria-pressed="true">
+        <span aria-hidden="true"><i class="fas fa-clock me-1"></i>6 hr</span>
+        <span class="visually-hidden">6 hours</span>
+      </button>
+      <button type="button" class="btn btn-outline-secondary" data-scope="1-day" aria-pressed="false">
+        <span aria-hidden="true"><i class="fas fa-calendar-day me-1"></i>1 day</span>
+        <span class="visually-hidden">1 day</span>
+      </button>
+      <button type="button" class="btn btn-outline-secondary" data-scope="3-days" aria-pressed="false">
+        <span aria-hidden="true"><i class="fas fa-calendar-week me-1"></i>3 days</span>
+        <span class="visually-hidden">3 days</span>
+      </button>
+      <button type="button" class="btn btn-outline-secondary" data-scope="1-week" aria-pressed="false">
+        <span aria-hidden="true"><i class="fas fa-calendar-week me-1"></i>1 week</span>
+        <span class="visually-hidden">1 week</span>
+      </button>
+      <button type="button" class="btn btn-outline-secondary" data-scope="all" aria-pressed="false">
+        <span aria-hidden="true"><i class="fas fa-calendar-alt me-1"></i>All</span>
+        <span class="visually-hidden">All data</span>
+      </button>
     </div>
   </div>
 
   <div id="timeline-container"></div>
+  <div id="charts">
+    <div id="size-chart" class="chart-container"></div>
+    <div id="flights-chart" class="chart-container"></div>
+    <div id="intensity-chart" class="chart-container"></div>
+  </div>
 </div>
 {% end %}
 
