@@ -20,3 +20,11 @@ gcs/__pycache__/
 gcs/robbenv/
 
 gcs/firebase_credentials.json
+
+gcs/deskapp/__pycache__/
+
+gcs/deskapp/trans_logs/
+
+gcs/deskapp/firebase_credentials.json
+
+gcs/wildfire_data.db
