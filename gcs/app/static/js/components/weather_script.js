@@ -4,7 +4,7 @@ async function fetchWeather(lat, lon) {
         console.log("Fetching weather for coordinates:", lat, lon);
 
         const response = await fetch(
-            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${apiKey}`
+            `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`
         );
 
         if (!response.ok) {
@@ -17,9 +17,9 @@ async function fetchWeather(lat, lon) {
 
         return {
             description: weatherData.weather[0].description,
-            temperature: weatherData.main.temp * (9/5) + 32,
-            humidity: weatherData.main.humidity,
-            windSpeed: weatherData.wind.speed,
+            temperature: weatherData.main.temp,
+            humidity:    weatherData.main.humidity,
+            windSpeed:   weatherData.wind.speed,
         };
     } catch (error) {
         console.error("Error fetching weather:", error);
@@ -35,7 +35,7 @@ async function displayWeather(lat, lon) {
         console.log("Weather data:", weather);
 
         document.getElementById("weather-description").textContent = weather.description;
-        document.getElementById("weather-temperature").textContent = weather.temperature.toFixed(1) * (9/5) + 32;
+        document.getElementById("weather-temperature").textContent = weather.temperature.toFixed(1);
         document.getElementById("weather-humidity").textContent = weather.humidity;
         document.getElementById("weather-wind").textContent = weather.windSpeed.toFixed(1);
 

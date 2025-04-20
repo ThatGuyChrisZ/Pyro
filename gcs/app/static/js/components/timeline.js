@@ -39,6 +39,7 @@ class TimelineController {
   
   init() {
     this.createControlUI();
+    this.bindScopeButtons();
     
     this.svg = d3.select(this.container)
       .append('svg')
@@ -91,46 +92,7 @@ class TimelineController {
     this.dateDisplay.style.fontWeight = 'bold';
     this.dateDisplay.style.fontSize = '16px';
     
-    const scopeSelector = document.createElement('div');
-    scopeSelector.className = 'timeline-scope-selector';
-    
-    const scopeLabel = document.createElement('label');
-    scopeLabel.textContent = 'Timeline Scope: ';
-    scopeLabel.htmlFor = 'timeline-scope-select';
-    
-    const scopeSelect = document.createElement('select');
-    scopeSelect.id = 'timeline-scope-select';
-    scopeSelect.className = 'form-select form-select-sm';
-    scopeSelect.style.width = '120px';
-    scopeSelect.style.display = 'inline-block';
-    
-    const scopeLabels = {
-      '6-hours': '6 Hours',
-      '1-day': '1 Day',
-      '3-days': '3 Days',
-      '1-week': '1 Week',
-      'all': 'All Data'
-    };
-    
-    Object.keys(scopeLabels).forEach(scope => {
-      const option = document.createElement('option');
-      option.value = scope;
-      option.textContent = scopeLabels[scope];
-      scopeSelect.appendChild(option);
-    });
-    
-    scopeSelect.value = this.currentScope;
-    
-    scopeSelect.addEventListener('change', () => {
-      this.currentScope = scopeSelect.value;
-      this.updateTimelineScope();
-    });
-    
-    scopeSelector.appendChild(scopeLabel);
-    scopeSelector.appendChild(scopeSelect);
-    
     controlsRow.appendChild(this.dateDisplay);
-    controlsRow.appendChild(scopeSelector);
     
     this.container.appendChild(controlsRow);
   }
@@ -486,6 +448,7 @@ class TimelineController {
     playBtn.className = 'btn btn-primary btn-sm';
     playBtn.innerHTML = '<i class="fas fa-play"></i>';
     playBtn.title = 'Play animation';
+    playBtn.style.marginLeft = '5px';
     
     const pauseBtn = document.createElement('button');
     pauseBtn.className = 'btn btn-secondary btn-sm';
@@ -519,6 +482,7 @@ class TimelineController {
     });
     exportBtn.style.marginLeft = '5px';
     pauseBtn.style.marginRight = '5px';
+    exportBtn.style.marginRight = '5px';
     controlsDiv.appendChild(exportBtn);
     
     const speedSelect = document.createElement('select');
@@ -642,6 +606,21 @@ class TimelineController {
       current: this.currentTime
     };
   }
+
+  bindScopeButtons() {
+    const buttons = document.querySelectorAll('.timeline-scope-selector .btn-group button');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        buttons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        this.currentScope = btn.getAttribute('data-scope');
+        
+        this.updateTimelineScope();
+      });
+    });
+  }
+  
   
   resize() {
     this.width = this.container.clientWidth - (this.options.padding * 2);

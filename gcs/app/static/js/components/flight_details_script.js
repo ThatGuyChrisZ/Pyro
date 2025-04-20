@@ -7,6 +7,7 @@ const flightId = new URLSearchParams(window.location.search).get("flight_id");
 let map, timeline, overlay;
 let pathLine = null;
 let fullFlightData = [];
+let baseLayers;
 
 document.addEventListener("DOMContentLoaded", async () => {
   setTitle();
@@ -25,11 +26,40 @@ function setTitle() {
 
 async function initializeMap() {
   const center = await fetchFireCenter();
+  map = L.map('map').setView([center.lat, center.lon], 14);
 
-  map = L.map("map").setView([center.lat, center.lon], 13);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors"
-  }).addTo(map);
+  // base layer
+  const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '© OpenStreetMap contributors'
+  });
+  const satLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles © Esri' }
+  );
+
+  osmLayer.addTo(map);
+  baseLayers = { osm: osmLayer, satellite: satLayer };
+
+  L.marker([center.lat, center.lon])
+    .addTo(map)
+    .bindTooltip(fireName || 'Unknown Fire')
+    .openTooltip();
+
+  // Map / Sat Buttons
+  document.getElementById('btnMapView').addEventListener('click', () => {
+    if (map.hasLayer(baseLayers.satellite)) map.removeLayer(baseLayers.satellite);
+    if (!map.hasLayer(baseLayers.osm))       map.addLayer(baseLayers.osm);
+    document.getElementById('btnMapView').classList.add('active');
+    document.getElementById('btnSatelliteView').classList.remove('active');
+  });
+
+  document.getElementById('btnSatelliteView').addEventListener('click', () => {
+    if (map.hasLayer(baseLayers.osm))       map.removeLayer(baseLayers.osm);
+    if (!map.hasLayer(baseLayers.satellite)) map.addLayer(baseLayers.satellite);
+    document.getElementById('btnSatelliteView').classList.add('active');
+    document.getElementById('btnMapView').classList.remove('active');
+  });
 }
 
 async function fetchFireCenter() {
