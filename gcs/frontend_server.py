@@ -516,6 +516,99 @@ class TestHandler(BaseHandler):
     def get(self):
         self.render("test.html")
 
+class CurrentFlightHandler(BaseHandler):
+    def get(self):
+        fire_name = self.get_argument("name", "")
+        flight_id = self.get_argument("flight_id", "")
+        self.render(
+            "current_flight.html",
+            fire_name=fire_name,
+            flight_id=flight_id
+        )
+
+class LiveFlightHandler(BaseHandler):
+    def get(self, flight_name=None):
+        """API endpoint to get flight data for a specific fire and flight ID"""
+        try:
+            cursor = self.db.cursor()
+            flight_id = self.get_argument("flight_id", None)
+            after_ns  = int(self.get_argument("after", 0))
+
+            if flight_id and flight_name:
+                # Get one specific flight matching both fire name and ID
+                query = """
+                    SELECT 
+                        flight_id,
+                        name, 
+                        ulog_filename,
+                        time_started,
+                        time_ended
+                    FROM flights
+                    WHERE name = ? AND flight_id = ?
+                """
+                cursor.execute(query, [flight_name, int(flight_id)])
+                flight_data = cursor.fetchone()
+
+                if flight_data:
+                    flight = dict(flight_data)
+
+                    # Get associated wildfire data
+                    path_query = """
+                        SELECT 
+                            id,
+                            name,
+                            latitude,
+                            longitude,
+                            alt as altitude,
+                            high_temp,
+                            low_temp,
+                            time_stamp
+                        FROM wildfires
+                        WHERE name = ? AND flight_id = ?
+                        ORDER BY time_stamp
+                    """
+                    cursor.execute(path_query, [flight_name, int(flight_id), after_ns])
+                    flight["wildfire_data"] = [dict(row) for row in cursor.fetchall()]
+
+                    self.write(json.dumps(flight))
+                else:
+                    self.set_status(404)
+                    self.write({ "error": "Flight not found" })
+
+            else:
+                # Return all flights (optional filtering with timestamps)
+                query = """
+                    SELECT 
+                        flight_id,
+                        name, 
+                        ulog_filename,
+                        time_started,
+                        time_ended
+                    FROM flights
+                    WHERE 1=1
+                """
+                params = []
+
+                time_from = self.get_argument('time_from', None)
+                time_to = self.get_argument('time_to', None)
+
+                if time_from:
+                    query += " AND time_started >= ?"
+                    params.append(float(time_from))
+
+                if time_to:
+                    query += " AND time_started <= ?"
+                    params.append(float(time_to))
+
+                cursor.execute(query, params)
+                flights = [dict(row) for row in cursor.fetchall()]
+                self.write(json.dumps(flights))
+
+        except Exception as e:
+            logging.error(f"Error fetching flight data: {str(e)}")
+            self.set_status(500)
+            self.write({ "error": "Failed to fetch flight data" })
+
 class WildfireStatusHandler(BaseHandler):
     def get(self):
         name        = self.get_argument("name", None)
@@ -636,6 +729,7 @@ def make_app():
         (r"/about", AboutHandler),
         (r"/fire_details", FireDetailsHandler),
         (r"/flight_details", FlightDetailsHandler),
+        (r"/current_flight", CurrentFlightHandler),
         
         # API routes
         (r"/heatmap_data", HeatmapDataHandler),
@@ -655,6 +749,7 @@ def make_app():
         
         # WebSocket route for live data
         (r"/ws/live", LiveDataWebSocketHandler),
+        (r"/api/live_flight/(\d+)", LiveFlightHandler),
         
         (r"/(.*)", tornado.web.StaticFileHandler, {"path": static_path, "default_filename": "index.html"}),
     ], 
