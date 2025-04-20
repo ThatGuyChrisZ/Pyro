@@ -56,8 +56,8 @@ GCS_ADDRESS = ("127.0.0.1", 5005)  # Localhost UDP port
 gps_sim_file = open('sim_gps.txt', 'r')
 UDP_PORT = 5004
 CALL_SIGN = "KK72PA"
-RF_TRANCIEVER_PORT = '/dev/ttyUSB1'
-rf_serial = None
+RF_TRANCIEVER_PORT = '/dev/ttyUSB0'
+rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10)
 
 # ----------------------- #
 # THERMAL CAMERA SETTINGS #
@@ -208,6 +208,7 @@ def create_packet(q3, q4, global_session_id):
 #   Return: None                                                       #
 ########################################################################
 def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
+    global rf_serial
     pid = os.getpid()
     
     if hasattr(os, 'sched_setaffinity'):
@@ -253,7 +254,7 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
         
             try:
                 if prog_mode != 2:
-                    rf_serial.flush()
+                    #rf_serial.flush()
                     rf_serial.write(ser_pac_to_send)
                 else:
                     udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
@@ -293,7 +294,7 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
             
             try:
                 if prog_mode != 2:
-                    rf_serial.flush()
+                    #rf_serial.flush()
                     rf_serial.write(ser_pac_to_send)
                 else:
                     udp_socket.sendto(ser_pac_to_send, GCS_ADDRESS)
@@ -408,6 +409,8 @@ def transmit_packet(ser_pac_to_send_info, q_unack_pac_info, udp_socket):
 ########################################################################
 # ONLY NEED Q4 AS AN ARGUMENT B/C LOGGER NEEDS TO BE REENCAPSULATED
 def receive_and_decode(my_packet_info_dict, prog_mode, q4, q_log):
+    global rf_serial
+    
     # UDP socket debug mode (local)
     if prog_mode == 2:
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
