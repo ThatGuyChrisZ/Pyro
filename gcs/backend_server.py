@@ -3,7 +3,6 @@ import time
 import json
 import sqlite3
 import multiprocessing as mp
-from multiprocessing import Manager
 from database import init_db, process_packet, sync_to_firebase, update_mission_data
 
 # This function is referenced but not directly used in our current backend.

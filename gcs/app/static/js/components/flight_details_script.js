@@ -1,4 +1,4 @@
-import TimelineController from "./timeline.js";
+import FlightTimelineController from "./flight_timeline.js";
 import ThermalOverlay from "./thermal.js";
 
 const fireName = new URLSearchParams(window.location.search).get("name");
@@ -56,10 +56,9 @@ async function initializeTimeline() {
   const container = document.getElementById("timeline-container");
   if (!container) return;
 
-  timeline = new TimelineController("timeline-container", {
+  timeline = new FlightTimelineController("timeline-container", {
     allowScrubbing: true,
     showTime: true,
-    showFlights: false,
   });
 
   await timeline.loadData(fireName, flightId);
