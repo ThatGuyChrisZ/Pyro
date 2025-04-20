@@ -28,3 +28,5 @@ gcs/deskapp/trans_logs/
 gcs/deskapp/firebase_credentials.json
 
 gcs/wildfire_data.db
+
+gcs/Deskapp/wildfire_data.db
