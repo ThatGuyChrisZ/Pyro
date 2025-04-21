@@ -7,17 +7,16 @@ from datetime import datetime
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
-from tornado.options import define, options, parse_command_line
-from urllib.parse import parse_qs
-from database import init_db, process_packet, update_mission_data, fetch_heatmap_data, fetch_all_heatmap_data, sync_to_firebase, update_fire_status
 from pymavlink import mavutil
 import time
 import multiprocessing as mp
-from tornado.web import RequestHandler
+from tornado.options import define, options, parse_command_line
+from urllib.parse import parse_qs
+from database import init_db, process_packet, update_mission_data, fetch_heatmap_data, fetch_all_heatmap_data, sync_to_firebase, update_fire_status
 
 # Command Line Arguments
 define("port", default=8000, help="Run on the given port", type=int)
-define("debug", default=True, help="Run in debug mode", type=bool)
+define("debug", default=False, help="Run in debug mode", type=bool)
 define("db_path", default="wildfire_data.db", help="Path to SQLite database", type=str)
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -522,7 +521,203 @@ class TestHandler(BaseHandler):
 
 class CurrentFlightHandler(BaseHandler):
     def get(self):
-        self.render("current_flight.html")
+        fire_name = self.get_argument("name", "")
+        flight_id = self.get_argument("flight_id", "")
+        self.render(
+            "current_flight.html",
+            fire_name=fire_name,
+            flight_id=flight_id
+        )
+
+class LiveFlightHandler(BaseHandler):
+    def get(self, flight_name=None):
+        """API endpoint to get flight data for a specific fire and flight ID"""
+        try:
+            cursor = self.db.cursor()
+            flight_id = self.get_argument("flight_id", None)
+            after_ns  = int(self.get_argument("after", 0))
+
+            if flight_id and flight_name:
+                # Get one specific flight matching both fire name and ID
+                query = """
+                    SELECT 
+                        flight_id,
+                        name, 
+                        ulog_filename,
+                        time_started,
+                        time_ended
+                    FROM flights
+                    WHERE name = ? AND flight_id = ?
+                """
+                cursor.execute(query, [flight_name, int(flight_id)])
+                flight_data = cursor.fetchone()
+
+                if flight_data:
+                    flight = dict(flight_data)
+
+                    # Get associated wildfire data
+                    path_query = """
+                        SELECT 
+                            id,
+                            name,
+                            latitude,
+                            longitude,
+                            alt as altitude,
+                            high_temp,
+                            low_temp,
+                            time_stamp
+                        FROM wildfires
+                        WHERE name = ? AND flight_id = ?
+                        ORDER BY time_stamp
+                    """
+                    cursor.execute(path_query, [flight_name, int(flight_id), after_ns])
+                    flight["wildfire_data"] = [dict(row) for row in cursor.fetchall()]
+
+                    self.write(json.dumps(flight))
+                else:
+                    self.set_status(404)
+                    self.write({ "error": "Flight not found" })
+
+            else:
+                # Return all flights (optional filtering with timestamps)
+                query = """
+                    SELECT 
+                        flight_id,
+                        name, 
+                        ulog_filename,
+                        time_started,
+                        time_ended
+                    FROM flights
+                    WHERE 1=1
+                """
+                params = []
+
+                time_from = self.get_argument('time_from', None)
+                time_to = self.get_argument('time_to', None)
+
+                if time_from:
+                    query += " AND time_started >= ?"
+                    params.append(float(time_from))
+
+                if time_to:
+                    query += " AND time_started <= ?"
+                    params.append(float(time_to))
+
+                cursor.execute(query, params)
+                flights = [dict(row) for row in cursor.fetchall()]
+                self.write(json.dumps(flights))
+
+        except Exception as e:
+            logging.error(f"Error fetching flight data: {str(e)}")
+            self.set_status(500)
+            self.write({ "error": "Failed to fetch flight data" })
+
+class WildfireStatusHandler(BaseHandler):
+    def get(self):
+        name        = self.get_argument("name", None)
+        filter_type = self.get_argument("filter", "active")
+        cursor      = self.db.cursor()
+
+        if name:
+            query = """
+                SELECT
+                    id,
+                    time_stamp,
+                    size,
+                    flights,
+                    intensity,
+                    max_temp,
+                    min_temp,
+                    alt_avg,
+                    avg_latitude,
+                    avg_longitude,
+                    num_data_points,
+                    first_time_stamp,
+                    status,
+                    last_flight_id
+                FROM wildfire_status
+                WHERE name = ?
+                ORDER BY time_stamp ASC
+            """
+            cursor.execute(query, (name,))
+            rows = cursor.fetchall()
+
+            data = []
+            for row in rows:
+                raw_ts       = row["time_stamp"]
+                raw_first_ts = row["first_time_stamp"]
+
+                ts = datetime.fromtimestamp(raw_ts / 1e9).isoformat()
+                first_ts = (
+                    datetime.fromtimestamp(raw_first_ts / 1e9).isoformat()
+                    if raw_first_ts else None
+                )
+
+                data.append({
+                    "id":               row["id"],
+                    "time_stamp":       ts,
+                    "first_time_stamp": first_ts,
+                    "size":             row["size"],
+                    "flights":          row["flights"],
+                    "intensity":        row["intensity"],
+                    "max_temp":         row["max_temp"],
+                    "min_temp":         row["min_temp"],
+                    "alt_avg":          row["alt_avg"],
+                    "avg_latitude":     row["avg_latitude"],
+                    "avg_longitude":    row["avg_longitude"],
+                    "num_data_points":  row["num_data_points"],
+                    "status":           row["status"],
+                    "last_flight_id":   row["last_flight_id"]
+                })
+
+            self.set_header("Content-Type", "application/json")
+            return self.write(json.dumps(data))
+        
+        subquery = """
+            SELECT name, MAX(time_stamp) AS max_time_stamp
+            FROM wildfire_status
+            WHERE 1=1
+        """
+        params = []
+        if filter_type == "active":
+            subquery += " AND status = ?"
+            params.append("active")
+        elif filter_type == "archived":
+            subquery += " AND status = ?"
+            params.append("archived")
+
+        subquery += " GROUP BY name"
+
+        query = f"""
+            SELECT 
+                ws.id,
+                ws.name, 
+                ws.location,
+                ws.size,
+                ws.intensity,
+                ws.alt_avg,
+                ws.status,
+                ws.max_temp,
+                ws.min_temp,
+                ws.avg_latitude,
+                ws.avg_longitude,
+                ws.flights,
+                ws.num_data_points,
+                ws.first_time_stamp, 
+                ws.time_stamp,
+                ws.last_flight_id
+            FROM wildfire_status ws
+            JOIN ({subquery}) latest 
+              ON ws.name = latest.name 
+             AND ws.time_stamp = latest.max_time_stamp
+            ORDER BY ws.time_stamp DESC
+        """
+
+        cursor.execute(query, params)
+        fires = [dict(row) for row in cursor.fetchall()]
+
+        self.set_header("Content-Type", "application/json")
+        self.write(json.dumps(fires))
 
 def make_app():
     static_path = os.path.join(os.path.dirname(__file__), "app/static")
@@ -537,6 +732,7 @@ def make_app():
         (r"/about", AboutHandler),
         (r"/fire_details", FireDetailsHandler),
         (r"/flight_details", FlightDetailsHandler),
+        (r"/current_flight", CurrentFlightHandler),
         
         # API routes
         (r"/heatmap_data", HeatmapDataHandler),
@@ -552,12 +748,11 @@ def make_app():
         (r"/api/flights", FlightDataHandler),
         (r"/api/flights/(\d+)", FlightDataHandler),
         (r"/api/flights/(.*)", FlightDataHandler),
-
-        # Deskapp routes
-        (r"/current_flight", CurrentFlightHandler),
+        (r"/api/fire_status", WildfireStatusHandler),
         
         # WebSocket route for live data
         (r"/ws/live", LiveDataWebSocketHandler),
+        (r"/api/live_flight/(\d+)", LiveFlightHandler),
         
         (r"/(.*)", tornado.web.StaticFileHandler, {"path": static_path, "default_filename": "index.html"}),
     ], 
@@ -574,7 +769,7 @@ def import_packets_from_file(file_path):
                 try:
                     packet_data = json.loads(line.strip())
                     name = packet_data.get("name", "Unnamed Fire")
-                    process_packet(packet_data, name, 1, "active")
+                    process_packet(packet_data, name, "active")
                 except json.JSONDecodeError as e:
                     print(f"Error decoding packet: {e}")
                 except Exception as e:
@@ -610,31 +805,15 @@ def avionics_integration(output):
             output.put(export)
             enabled = 1
 
-def start_server():
+def main():
     # Initialize database
     init_db()
 
     # Optionally import test packets
-    import_packets_from_file('test_packets.txt')
+    import_packets_from_file('all_fire_packets.txt')
     
     # Parse command line arguments
     parse_command_line()
-
-    if (options.debug == False):
-        # Start the avionics integration process
-        q1 = mp.Queue()
-        p1 = mp.Process(target=avionics_integration, args=(q1,))
-        p1.start()
-        
-        try:
-            while True:
-                if not q1.empty():
-                    data = q1.get()
-                    print("Received data from avionics:", data)
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print("Shutting down backend server.")
-            p1.terminate()
     
     # Create and start the app
     app = make_app()
@@ -642,5 +821,23 @@ def start_server():
     
     print(f"Pyro Visualization server running at http://localhost:{options.port}/")
     print(f"Debug mode: {options.debug}")
-    
+
     tornado.ioloop.IOLoop.current().start()
+    
+    # Start the avionics integration process
+    q1 = mp.Queue()
+    p1 = mp.Process(target=avionics_integration, args=(q1,))
+    p1.start()
+    
+    try:
+        while True:
+            if not q1.empty():
+                data = q1.get()
+                print("Received data from avionics:", data)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Shutting down backend server.")
+        p1.terminate()
+
+if __name__ == "__main__":
+    main()

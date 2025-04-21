@@ -45,7 +45,8 @@ def init_db():
             time_stamp REAL,
             heading REAL,
             speed REAL,
-            flight_id INTEGER NOT NULL DEFAULT -1
+            flight_id INTEGER NOT NULL DEFAULT -1,
+            session_id STRING
         )
         """
     )
@@ -105,7 +106,8 @@ def sync_to_firebase():
             "time_stamp": row[12],
             "heading": row[13],
             "speed": row[14],
-            "flight_id": row[15]
+            "flight_id": row[15],
+            "session_id": row[16]
         }
 
         # Add to batch only if it doesn't already exist in Firebase
@@ -130,7 +132,8 @@ def process_packet(packet, name, status="active"):
     try:
         ns24h = 24 * 60 * 60 * 1_000_000_000 
         pac_id = packet.get("pac_id", -1)
-        flight_id = packet.get("session_id", -1)
+        session_id = packet.get("session_id", -1)
+        flight_id = process_new_flight(name, session_id) or 0
         gps_data = packet.get("gps_data", [0.0, 0.0])
         latitude, longitude = gps_data[0], gps_data[1]
         alt = packet.get("alt", 0.0)
@@ -163,20 +166,19 @@ def process_packet(packet, name, status="active"):
             INSERT INTO wildfires (
                 name, pac_id, latitude, longitude, alt, high_temp, low_temp, 
                 status, date_received, time_received, sync_status, time_stamp,
-                heading, speed, flight_id
+                heading, speed, flight_id, session_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status,
-             date_received, time_received, "pending", time_stamp, heading, speed, flight_id)
+             date_received, time_received, "pending", time_stamp, heading, speed, flight_id, session_id)
         )
 
         conn.commit()
         conn.close()
 
-        process_new_flight(name, flight_id)
         # update_fire_status(name)
-        update_flights(flight_id, name, "ulog_filename")
+        update_flights(flight_id, session_id, name, "ulog_filename")
 
         # Run Firebase sync in a parallel thread
         #sync_thread = Thread(target=sync_to_firebase)
@@ -311,76 +313,78 @@ def init_wildfire_status_db():
     conn.commit()
     conn.close()
 
-# Each record represents an data aggregate update from the past 24 hours
+import sqlite3
+import time
+import math
+
+# Each record represents a data aggregate update from the past 24 hours
 def update_fire_status(name: str):
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
-    now = time.time_ns()
-    ns24h = 24 * 60 * 60 * 1_000_000_000 
-    window_start = now - ns24h
-
-    # Data from the past 24 hours
     cursor.execute(
-        """
-        SELECT latitude, longitude, high_temp, low_temp, alt, flight_id, time_stamp 
-        FROM wildfires 
-        WHERE name = ? AND time_stamp >= ? AND high_temp >= ?
-        """,
-        (name, window_start, MIN_TEMP_THRESHOLD)
+        "SELECT MAX(time_stamp) FROM wildfires WHERE name = ?",
+        (name,)
     )
-    rows = cursor.fetchall()
-    if not rows:
-        print(f"No recent data for fire {name} meeting the threshold.")
+    result = cursor.fetchone()
+    if not result or result[0] is None:
+        print(f"No data at all for fire {name}.")
         conn.close()
         return
 
-    latitudes = []
-    longitudes = []
-    intensities = []
-    altitudes = []
-    high_temps = []
-    low_temps = []
-    flight_ids = set()
-    timestamps = []
+    window_end = result[0]
+    ns24h = 24 * 60 * 60 * 1_000_000_000
+    window_start = window_end - ns24h
 
-    for row in rows:
-        lat, lon, high_temp, low_temp, alt, flight_id, ts = row
-        latitudes.append(lat)
-        longitudes.append(lon)
-        intensities.append((high_temp + low_temp) / 2)
-        altitudes.append(alt)
-        high_temps.append(high_temp)
-        low_temps.append(low_temp)
-        flight_ids.add(flight_id)
-        timestamps.append(ts)
+    cursor.execute(
+        """
+        SELECT latitude, longitude, high_temp, low_temp, alt, flight_id, time_stamp 
+          FROM wildfires 
+         WHERE name = ?
+           AND time_stamp BETWEEN ? AND ?
+           AND high_temp >= ?
+        """,
+        (name, window_start, window_end, MIN_TEMP_THRESHOLD)
+    )
+    rows = cursor.fetchall()
+    if not rows:
+        print(f"No recent data for fire {name} in the last 24h window ending at {window_end}.")
+        conn.close()
+        return
 
-    num_points = len(intensities)
-    new_intensity = sum(intensities) / num_points
-    new_alt_avg = sum(altitudes) / num_points
-    new_avg_lat = sum(latitudes) / num_points
-    new_avg_lon = sum(longitudes) / num_points
-    new_max_temp = max(high_temps)
-    new_min_temp = min(low_temps)
-    new_flights = len(flight_ids)
-    new_first_time_stamp = min(timestamps)
-    new_time_stamp = max(timestamps)
-    new_last_flight_id = max(flight_ids)
+    latitudes   = [r[0] for r in rows]
+    longitudes  = [r[1] for r in rows]
+    high_temps  = [r[2] for r in rows]
+    low_temps   = [r[3] for r in rows]
+    altitudes   = [r[4] for r in rows]
+    flight_ids  = {r[5] for r in rows}
+    timestamps  = [r[6] for r in rows]
+    intensities = [(h + l) / 2 for h, l in zip(high_temps, low_temps)]
+
+    num_points          = len(intensities)
+    new_intensity       = sum(intensities) / num_points
+    new_alt_avg         = sum(altitudes) / num_points
+    new_avg_lat         = sum(latitudes) / num_points
+    new_avg_lon         = sum(longitudes) / num_points
+    new_max_temp        = max(high_temps)
+    new_min_temp        = min(low_temps)
+    new_flights         = len(flight_ids)
+    new_first_time_stamp= min(timestamps)
+    new_time_stamp      = max(timestamps)
+    new_last_flight_id  = max(flight_ids)
 
     # Size Calculation
-    max_lat = max(latitudes)
-    min_lat = min(latitudes)
-    max_lon = max(longitudes)
-    min_lon = min(longitudes)
+    max_lat = max(latitudes); min_lat = min(latitudes)
+    max_lon = max(longitudes); min_lon = min(longitudes)
     lat_diff = max_lat - min_lat
     lon_diff = max_lon - min_lon
     avg_lat_for_conv = (max_lat + min_lat) / 2
     lat_diff_km = lat_diff * 111.32
     lon_diff_km = lon_diff * 111.32 * math.cos(math.radians(avg_lat_for_conv))
-    new_size = abs(lat_diff_km * lon_diff_km) 
+    new_size = abs(lat_diff_km * lon_diff_km)
 
     location = get_nearest_city(new_avg_lat, new_avg_lon)
-    
+
     cursor.execute(
         """
         INSERT INTO wildfire_status (
@@ -391,30 +395,58 @@ def update_fire_status(name: str):
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (name, location, new_size, new_intensity, new_alt_avg,
-         new_avg_lat, new_avg_lon, new_flights, num_points,
-         new_first_time_stamp, new_time_stamp, "active",
-         new_max_temp, new_min_temp, new_last_flight_id)
+        (
+            name, location, new_size, new_intensity, new_alt_avg,
+            new_avg_lat, new_avg_lon, new_flights, num_points,
+            new_first_time_stamp, new_time_stamp, "active",
+            new_max_temp, new_min_temp, new_last_flight_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+    print(f"✓ Fire status for '{name}' updated using data from {window_start} to {window_end}.")
+
+def process_new_flight(name: str, session_id: str):
+    conn = sqlite3.connect("wildfire_data.db")
+    cursor = conn.cursor()
+
+    # Check if this session already exists in the flights table
+    cursor.execute(
+        "SELECT flight_id FROM flights WHERE name = ? AND session_id = ?",
+        (name, session_id)
+    )
+    row = cursor.fetchone()
+
+    if row:
+        conn.close()
+        return row[0]  # Return existing flight_id
+
+    # Assign new flight_id
+    cursor.execute(
+        "SELECT MAX(flight_id) FROM flights WHERE name = ?",
+        (name,)
+    )
+    result = cursor.fetchone()
+    last_flight_id = result[0] if result and result[0] is not None else 0
+    new_flight_id = last_flight_id + 1
+    update_fire_status(name)
+
+    # Insert new session/flight mapping
+    cursor.execute(
+        """
+        INSERT INTO flights (flight_id, name, session_id, time_started)
+        VALUES (?, ?, ?, ?)
+        """,
+        (new_flight_id, name, session_id, time.time())
     )
 
     conn.commit()
     conn.close()
 
-# Wildfire status updated if new flight id
-def process_new_flight(name: str, flight_id: int):
-    conn = sqlite3.connect("wildfire_data.db")
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT MAX(last_flight_id) FROM wildfire_status WHERE name = ?",
-        (name,)
-    )
-    result = cursor.fetchone()
-    last_flight_id = result[0] if result and result[0] is not None else 0
-    if flight_id > last_flight_id:
-        print(f"New flight {flight_id} received for {name}. Updating statistics...")
-        update_fire_status(name)
-    conn.close()
-
+    print(f"New flight session '{session_id}' received for {name}. Assigned flight ID {new_flight_id}.")
+    return new_flight_id
+    
 def get_nearest_city(latitude: float, longitude: float) -> str:
     try:
         url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&zoom=5"
@@ -489,6 +521,7 @@ def init_flights_db():
         CREATE TABLE IF NOT EXISTS flights (
             flight_id INTEGER,
             name TEXT,
+            session_id STRING,
             ulog_filename TEXT,
             time_started REAL,
             time_ended
@@ -501,7 +534,7 @@ def init_flights_db():
 import time
 import sqlite3
 
-def update_flights(flight_id, name, ulog_filename):
+def update_flights(flight_id, session_id, name, ulog_filename):
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
@@ -513,10 +546,10 @@ def update_flights(flight_id, name, ulog_filename):
         time_started = time.time_ns()
         cursor.execute(
             """
-            INSERT INTO flights (flight_id, name, ulog_filename, time_started, time_ended)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO flights (flight_id, name, session_id, ulog_filename, time_started, time_ended)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (flight_id, name, ulog_filename, time_started, time_started)
+            (flight_id, name, session_id, ulog_filename, time_started, time_started)
         )
         conn.commit()
     else:

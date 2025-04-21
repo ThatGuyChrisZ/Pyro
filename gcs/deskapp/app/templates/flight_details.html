@@ -34,18 +34,6 @@
   #timeline-container {
     margin-top: 30px;
   }
-
-  .map-container {
-    position: relative;
-    padding-top: 50px;
-  }
-
-  .map-view-toggle {
-    position: absolute;
-    top: 10px;   
-    right: 10px;  
-    z-index: 1100;
-  }
 </style>
 {% end %}
 
@@ -55,10 +43,6 @@
 
   <div class="map-container">
     <div id="map"></div>
-    <div class="map-view-toggle btn-group" role="group" aria-label="Map view selector">
-      <button id="btnMapView" type="button" class="btn btn-sm btn-outline-secondary active">Map</button>
-      <button id="btnSatelliteView" type="button" class="btn btn-sm btn-outline-secondary">Satellite</button>
-    </div>
   </div>
 
   <div id="timeline-container"></div>
@@ -72,5 +56,5 @@
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
 <script type="module" src="{{ static_url('js/components/flight_details_script.js') }}"></script>
-<script type="module" src="{{ static_url('js/components/flight_timeline.js') }}"></script>
+<script type="module" src="{{ static_url('js/components/timeline.js') }}"></script>
 {% end %}

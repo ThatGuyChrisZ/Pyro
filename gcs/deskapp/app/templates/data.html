@@ -4,30 +4,16 @@
 {% block content %}
 <div class="container mt-4">
   <h2>Wildfire Database</h2>
-  <p>Browse collected wildfire data…</p>
+  <p>Browse collected wildfire data. You can filter by fire name and export the data as CSV.</p>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <div class="row g-3 align-items-center">
-        <div class="col-auto">
-          <label for="fire-filter" class="col-form-label">Filter by Fire:</label>
-        </div>
-        <div class="col-auto">
-          <select id="fire-filter" class="form-select">
-          </select>
-        </div>
-        <div class="col-auto">
-          <a href="/download_csv" class="btn btn-primary">Export CSV</a>
-        </div>
-      </div>
-    </div>
+  <div class="mb-3">
+    <label for="fire-filter" class="form-label">Filter by Fire Name:</label>
+    <select id="fire-filter" class="form-select" style="max-width: 300px;"></select>
   </div>
 
-  <div class="card">
-    <div class="card-body">
-      <div id="table-container" class="table-responsive"></div>
-    </div>
-  </div>
+  <a href="/download_csv" class="btn btn-primary mb-3">Download as CSV</a>
+
+  <div id="table-container" class="table-responsive"></div>
 </div>
 {% end %}
 
