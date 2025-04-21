@@ -109,32 +109,35 @@ def setup_csv_logger(csv_file):
             writer.writerow(["timestamp", "session_id", "packet_id", "pac_type", 
                              "send(s)/receive(r)", "trans_type", "num_transmissions", "corrupted"])
 
-def radio_log_listener(log_queue):
+def radio_log_listener(q_log):
     """Process that listens for logs and writes them to CSV."""    
     while True:
         try:
-            record = log_queue.get()
+            record = q_log.get()
             if record is None:
                 break  # Stop listener when None is received
 
             csv_file = record["csv_file"]
-            setup_csv_logger(csv_file)
-    
+            setup_csv_logger(csv_file)  # Ensure headers if file doesn't exist
+
+            # Open and write within the same block
             with open(csv_file, mode="a", newline="") as file:
                 writer = csv.writer(file)
-            
-            writer.writerow([record["timestamp"], 
-                                record["session_id"], 
-                                record["packet_id"], 
-                                record["pac_type"], 
-                                record["send(s)/receive(r)"], 
-                                record["trans_type"], 
-                                record["num_transmissions"], 
-                                record["corrupted"]])
-            file.flush()  # Flush immediately to prevent data loss
-        
+                writer.writerow([
+                    record["timestamp"], 
+                    record["session_id"], 
+                    record["packet_id"], 
+                    record["pac_type"], 
+                    record["send(s)/receive(r)"], 
+                    record["trans_type"], 
+                    record["num_transmissions"], 
+                    record["corrupted"]
+                ])
+                file.flush()
+
         except Exception as e:
             print("Logging error:", e)
+
 
 def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissions, corrupted, q_log):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")

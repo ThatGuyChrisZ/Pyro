@@ -197,7 +197,7 @@ def create_packet(q3, q4, global_session_id):
             else:
                 pac_id_to_create += 1
 
-        time.sleep(2)
+        #time.sleep(2)
 
 
 
@@ -335,7 +335,7 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
         else:
             pass
         
-        time.sleep(2)
+        #time.sleep(2)
 
 
 

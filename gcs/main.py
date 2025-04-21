@@ -9,6 +9,9 @@ import os
 import subprocess
 import multiprocessing as mp
 import signal
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
                              QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit,
                              QComboBox, QMessageBox, QGraphicsOpacityEffect, QTabWidget)
@@ -43,7 +46,7 @@ class GCSMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🔥PYRO")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1920, 1500)
         self.setWindowIcon(QIcon("deskapp/assets/icons/fire.ico"))
         self.prog_mode = None
         self.trans_port = None
@@ -169,9 +172,19 @@ class GCSMainWindow(QMainWindow):
 
     def init_radio_tab(self):
         layout = QVBoxLayout()
-        self.radio_status_label = QLabel("Radio diagnostics and performance metrics will display here.")
-        layout.addWidget(self.radio_status_label)
+
+        # Add a button to trigger graph generation
+        self.generate_graph_button = QPushButton("Generate Radio Graphs")
+        self.generate_graph_button.clicked.connect(self.display_radio_graphs)
+        layout.addWidget(self.generate_graph_button)
+
+        # Label to show the graph image
+        self.radio_graph_label = QLabel()
+        self.radio_graph_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.radio_graph_label)
+
         self.radio_tab.setLayout(layout)
+
 
     def start_backend_processes(self):
         self.prog_mode = int(self.prog_mode_dropdown.currentText()[0])
@@ -268,6 +281,84 @@ class GCSMainWindow(QMainWindow):
             if self.prog_mode != 0:
                 print("FORCE KILLING [start_radio] and [start_server]")
                 print("GCS and backend stopped.")
+
+    def display_radio_graphs(self):
+        try:
+            log_dir = "trans_logs"
+            all_data = []
+            for file in os.listdir(log_dir):
+                if file.endswith(".csv"):
+                    df = pd.read_csv(os.path.join(log_dir, file))
+                    all_data.append(df)
+
+            if not all_data:
+                self.radio_status_label.setText("No logs found.")
+                return
+
+            df = pd.concat(all_data, ignore_index=True)
+            df["timestamp"] = pd.to_datetime(df["timestamp"], errors='coerce')
+            df["packet_id"] = pd.to_numeric(df["packet_id"], errors='coerce')
+            df.dropna(subset=["timestamp", "packet_id"], inplace=True)
+
+            fig, axs = plt.subplots(3, 2, figsize=(30, 24))
+            axs = axs.flatten()
+
+            # 1. % Corrupted Packets
+            corruption_rate = df.groupby("pac_type")["corrupted"].mean().reset_index()
+            sns.barplot(data=corruption_rate, x="pac_type", y="corrupted", ax=axs[0])
+            axs[0].set_title("Percentage of Corrupted Packets")
+            axs[0].set_ylabel("Corruption Rate")
+
+            # 2. Retransmissions per pac_type
+            retrans_avg = df.groupby("pac_type")["num_transmissions"].mean().reset_index()
+            sns.barplot(data=retrans_avg, x="pac_type", y="num_transmissions", ax=axs[1])
+            axs[1].set_title("Average Retransmissions by Packet Type")
+            axs[1].set_ylabel("Avg. Transmissions")
+
+            # 3. Missing Packets
+            recv_df = df[df["send(s)/receive(r)"] == "r"]
+            for session_id in recv_df["session_id"].unique():
+                s_df = recv_df[recv_df["session_id"] == session_id]
+                expected_ids = range(int(s_df["packet_id"].min()), int(s_df["packet_id"].max()) + 1)
+                received_ids = s_df["packet_id"].unique()
+                missing = sorted(set(expected_ids) - set(received_ids))
+                axs[2].plot(received_ids, label=f"Session {session_id}")
+                axs[2].scatter(missing, [-1]*len(missing), c="red", marker="x", label=f"Missing {session_id}")
+            axs[2].set_title("Received vs Missing Packet IDs")
+            axs[2].set_xlabel("Packet ID")
+            axs[2].legend(loc='upper right')
+
+            # 4. Out-of-order Packets
+            recv_sorted = recv_df.sort_values("timestamp")
+            recv_sorted["expected"] = recv_sorted["packet_id"].cummin()
+            recv_sorted["out_of_order"] = recv_sorted["packet_id"] < recv_sorted["expected"]
+            sns.scatterplot(data=recv_sorted, x="timestamp", y="packet_id", hue="out_of_order", ax=axs[3])
+            axs[3].set_title("Out-of-Order Packet Detection")
+            axs[3].legend(title="Out of Order")
+
+            # 5. Retransmission Histogram
+            sns.histplot(data=recv_df, x="num_transmissions", bins=range(1, recv_df["num_transmissions"].max()+2), ax=axs[4])
+            axs[4].set_title("Histogram of Retransmissions")
+            axs[4].set_xlabel("# Transmissions")
+
+            # Hide unused subplot (bottom-right)
+            axs[5].axis("off")
+
+            # Save plot
+            graph_path = os.path.join(log_dir, "radio_graph.png")
+            plt.tight_layout()
+            plt.savefig(graph_path)
+            plt.close()
+
+            # Display in QLabel
+            pixmap = QPixmap(graph_path)
+            self.radio_graph_label.setPixmap(pixmap.scaledToWidth(800, Qt.SmoothTransformation))
+
+        except Exception as e:
+            self.radio_status_label.setText(f"Error generating graph: {e}")
+
+
+
 
 #
 #   THIS CLASS (FadingSplashScreen) WAS CREATED USING AN LLM (why would I program this myself??)
