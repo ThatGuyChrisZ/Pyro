@@ -64,7 +64,7 @@ def generate_test_data(file_path, name, center_lat, center_lon, num_points=100):
             "alt": alt,
             "high_temp": high_temp,
             "low_temp": low_temp,
-            "session_id": session_id
+            "session_id": session_id,
         }
         packets.append(packet)
     

@@ -1,20 +1,25 @@
-import unittest
-import sqlite3
 import time
-import os
 import struct
 import zlib
-import serial
-import requests
 import socket
+import sqlite3
+import unittest
+import requests
+import serial
+import os
 from multiprocessing import Process
 
+# ------------------- #
+# GLOBAL VARIABLES   #
+# ------------------- #
 DATABASE_PATH = "wildfire_data.db"
 SERVER_URL = "http://localhost:8000"
-DRONE_ADDRESS = ("127.0.0.1", 5004)  # Localhost UDP port for drone in mode 2
-UDP_PORT = 5005 # Port for UDP communication in debug mode (2)
+DRONE_ADDRESS = ("127.0.0.1", 5004)
+UDP_PORT = 5005  # Debug UDP port for GCS
 
-# Test Packet Data
+# ------------------- #
+# TEST PACKET DATA   #
+# ------------------- #
 TEST_PACKET_ID = 6666
 TEST_PACKET = {
     "pac_id": TEST_PACKET_ID,
@@ -22,87 +27,98 @@ TEST_PACKET = {
     "alt": 1500,
     "high_temp": 500,
     "low_temp": 300,
-    "time_stamp": 100000
+    "time_stamp": 100000,
+    "session_id": "738479814012"
 }
-
 
 class TestGCSSystem(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.main_process = Process(target=os.system, args=("python main.py --mode 2",))
-        cls.server_process = Process(target=os.system, args=("python server.py",))
-
+        """Start main.py and frontend_server.py, wait until they respond."""
+        cls.main_process = Process(
+            target=os.system,
+            args=("python main.py --mode 2",)
+        )
+        cls.server_process = Process(
+            target=os.system,
+            args=("python frontend_server.py",)
+        )
         cls.main_process.start()
         cls.server_process.start()
 
+        # wait for frontend_server
         timeout = 10
         start_time = time.time()
-
-        # Wait for server.py to be responsive
         while time.time() - start_time < timeout:
             try:
-                response = requests.get(f"{SERVER_URL}/wildfire_list", timeout=2)
-                if response.status_code == 200:
-                    print("✅ server.py is running and responsive.")
+                resp = requests.get(f"{SERVER_URL}/wildfire_markers", timeout=2)
+                if resp.status_code == 200:
                     break
             except requests.exceptions.RequestException:
                 time.sleep(1)
 
-        # Wait for main.py to start
+        # wait for main.py
         start_time = time.time()
         while time.time() - start_time < timeout:
             if cls.is_process_running("main.py"):
-                print("✅ main.py is running.")
                 break
             time.sleep(1)
-        
         if not cls.is_process_running("main.py"):
-            raise RuntimeError("❌ main.py is NOT running. Ensure GCS UI has started it.")
-
+            raise RuntimeError("main.py did not start; check GCS UI launch.")
 
     @classmethod
     def tearDownClass(cls):
+        """Terminate processes and clean up test data from the database."""
         cls.main_process.terminate()
         cls.server_process.terminate()
 
         conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM wildfires WHERE pac_id = ?", (TEST_PACKET_ID,))
+        cursor.execute(
+            "DELETE FROM wildfires WHERE pac_id = ?", (TEST_PACKET_ID,)
+        )
         conn.commit()
         conn.close()
 
     @staticmethod
     def is_process_running(target_script):
+        """Return True if any running process cmdline contains target_script."""
         import psutil
-        for process in psutil.process_iter(attrs=["pid", "cmdline"]):
-            cmdline = process.info.get("cmdline", [])
-            if cmdline and any(target_script in arg for arg in cmdline):
+        for proc in psutil.process_iter(attrs=["cmdline"]):
+            cmd = proc.info.get("cmdline") or []
+            if any(target_script in part for part in cmd):
                 return True
         return False
 
-
     def test_send_packet_through_main(self):
+        """Pack and send a UDP packet, verifying no exceptions are raised."""
+        session_bytes = TEST_PACKET["session_id"].encode('ascii')
+        if len(session_bytes) < 12:
+            session_bytes = session_bytes.ljust(12, b'\x00')
+        else:
+            session_bytes = session_bytes[:12]
+
+        # Pack fields and checksum
         payload = struct.pack(
-            '<IffIhhq', 
+            '<IffIhhq12s',
             TEST_PACKET["pac_id"],
             TEST_PACKET["gps_data"][0],
             TEST_PACKET["gps_data"][1],
             TEST_PACKET["alt"],
             TEST_PACKET["high_temp"],
             TEST_PACKET["low_temp"],
-            TEST_PACKET["time_stamp"] 
+            TEST_PACKET["time_stamp"],
+            session_bytes
         )
         checksum = zlib.crc32(payload)
-        serialized_packet = payload + struct.pack('<I', checksum) 
+        packet = payload + struct.pack('<I', checksum)
 
+        # Send via UDP
+        udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
-            udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            udp_socket.sendto(serialized_packet, ("127.0.0.1", UDP_PORT))
-            print(f"✅ Sent test packet to UDP port {UDP_PORT}")
-            time.sleep(1)
+            udp_sock.sendto(packet, ("127.0.0.1", UDP_PORT))
         except socket.error as e:
-            print(f"❌ Error sending test packet to UDP: {e}")
-
-
-if __name__ == "__main__":
+            self.fail(f"Failed to send UDP packet: {e}")
+                                                           #
+if __name__ == '__main__':
     unittest.main()

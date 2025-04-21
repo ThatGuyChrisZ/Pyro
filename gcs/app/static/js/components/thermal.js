@@ -1,22 +1,29 @@
 class ThermalOverlay {
-  constructor(mapInstance) {
+  constructor(mapInstance, { mode = "fire" } = {}) {
     this.map = mapInstance;
+    this.mode = mode;
     this.heatLayer = null;
     this.thermalData = [];
     this.avgAltitude = null;
     this.colorGradient = {
-      0.0: "rgba(0, 0, 255, 0)",
-      0.4: "blue",
-      0.6: "lime",
-      0.7: "yellow",
-      0.8: "orange",
-      1.0: "red"
+      0.0: "rgba(0,0,255, 0)",  
+      0.4: "rgba(0,0,255, 0.2)",
+      0.6: "rgba(0,255,0, 0.4)", 
+      0.8: "rgba(255,255,0,0.7)",
+      1.0: "rgba(255,  0,  0,1.0)"
     };
 
     this.minZoom = 5;
     this.maxZoom = 18;
     this.map.setMinZoom(this.minZoom);
     this.map.setMaxZoom(this.maxZoom);
+
+    // Fire mode
+    this.fireCutoff = 0.20;
+    this.fireMinOpacity = 0.35;
+    // Flight mode
+    this.flightCutoff = 0.0;
+    this.flightMinOpacity = 0.5;
 
     this.map.on("zoomend", () => {
       if (this.heatLayer) {
@@ -31,75 +38,86 @@ class ThermalOverlay {
       if (time_stamp || flight_id) {
         const params = new URLSearchParams();
         if (time_stamp) params.append("time_stamp", time_stamp);
-        if (flight_id) params.append("flight_id", flight_id);
+        if (flight_id)  params.append("flight_id", flight_id);
         url += "?" + params.toString();
       }
-
+  
       const response = await fetch(url);
-      const data = await response.json();
-
+      const data     = await response.json();
       if (!Array.isArray(data) || data.length === 0) {
         console.warn("No thermal data returned");
         this.thermalData = [];
         this.avgAltitude = null;
         return [];
       }
-
-      let rawPoints = data.map(point => ({
-        lat: point.latitude,
-        lng: point.longitude,
+  
+      const rawPoints = data.map(point => ({
+        lat:       point.latitude,
+        lng:       point.longitude,
         high_temp: point.high_temp,
-        low_temp: point.low_temp,
-        altitude: point.altitude,
+        low_temp:  point.low_temp,
+        altitude:  point.altitude,
         timestamp: point.time_stamp
       }));
-
-      // Most recent data comes first
-      // Only use most recent data if more data within threshold
-      rawPoints.sort((a, b) => new Date(b.timestamp / 1000000) - new Date(a.timestamp / 1000000));
-      const threshold = 50;
-      const deduped = [];
-
-      for (const point of rawPoints) {
-        const hasOverlap = deduped.some(existing => {
-          const distance = L.latLng(point.lat, point.lng).distanceTo(
-            L.latLng(existing.lat, existing.lng)
-          );
-          return distance < threshold;
+  
+      let pointsToProcess;
+      if (this.mode === "flight") {
+        // in flight mode: keep every point, no deduplication
+        pointsToProcess = rawPoints;
+      } else {
+        // in fire mode: bucket‑based deduplication
+        const THRESHOLD_METERS   = 150;
+        const METERS_PER_DEG_LAT = 111_320;
+        const bucketDegLat       = THRESHOLD_METERS / METERS_PER_DEG_LAT;
+        const buckets = new Map();
+  
+        rawPoints.forEach(pt => {
+          const metersPerDegLng = METERS_PER_DEG_LAT * Math.cos(pt.lat * Math.PI/180);
+          const bucketDegLng    = THRESHOLD_METERS / metersPerDegLng;
+          const keyLat = Math.floor(pt.lat / bucketDegLat);
+          const keyLng = Math.floor(pt.lng / bucketDegLng);
+          const key    = `${keyLat}:${keyLng}`;
+  
+          const existing = buckets.get(key);
+          if (!existing || pt.timestamp > existing.timestamp) {
+            buckets.set(key, pt);
+          }
         });
-        if (!hasOverlap) {
-          deduped.push(point);
-        }
+  
+        pointsToProcess = Array.from(buckets.values());
       }
-
-      const avgTemps = deduped.map(p => (p.high_temp + p.low_temp) / 2);
-      const minTemp = Math.min(...avgTemps);
-      const maxTemp = Math.max(...avgTemps);
-
-      const finalPoints = deduped.map(p => {
-        const avgTemp = (p.high_temp + p.low_temp) / 2;
-        let intensity = (maxTemp - minTemp) ? (avgTemp - minTemp) / (maxTemp - minTemp) : 1;
+  
+      const avgTemps = pointsToProcess.map(p => (p.high_temp + p.low_temp) / 2);
+      const minTemp  = Math.min(...avgTemps);
+      const maxTemp  = Math.max(...avgTemps);
+  
+      const finalPoints = pointsToProcess.map(p => {
+        const avgTemp   = (p.high_temp + p.low_temp) / 2;
+        const intensity = (maxTemp > minTemp)
+          ? (avgTemp - minTemp) / (maxTemp - minTemp)
+          : 1;
         return {
-          lat: p.lat,
-          lng: p.lng,
+          lat:       p.lat,
+          lng:       p.lng,
           intensity,
-          altitude: p.altitude,
+          altitude:  p.altitude,
           timestamp: p.timestamp
         };
       });
-
-      console.log("Altitude:", finalPoints.map(p => p.altitude));
-      console.log("Thermal Data Intensities after deduplication:", finalPoints.map(p => p.intensity));
-
+  
       this.thermalData = finalPoints;
-      this.avgAltitude = finalPoints.reduce((sum, p) => sum + p.altitude, 0) / finalPoints.length;
-      console.log("Avg Altitude:", this.avgAltitude);
+      this.avgAltitude = finalPoints.reduce((sum, pt) => sum + pt.altitude, 0) 
+                       / finalPoints.length;
+  
+      console.log("Using", pointsToProcess.length, "points;", 
+                  "avgAltitude =", this.avgAltitude);
       return this.thermalData;
+  
     } catch (error) {
       console.error("Error loading thermal data:", error);
       return [];
     }
-  }
+  }  
 
   calculateDynamicRadius() {
     if (!this.avgAltitude) return 25;
@@ -117,37 +135,64 @@ class ThermalOverlay {
     
     return pixelRadius;
   }
-  
 
   render(options = {}) {
     if (this.heatLayer) {
       this.map.removeLayer(this.heatLayer);
     }
 
-    const dynamicRadius = this.calculateDynamicRadius();
+    const isFlight = this.mode === "flight";
+    const cutoff = isFlight ? this.flightCutoff : this.fireCutoff;
+
+    const heatData = this.thermalData
+      .filter(p => p.intensity > cutoff)
+      .map(p => [p.lat, p.lng, p.intensity]);
+
+    const radius = this.calculateDynamicRadius();
+
+    let blur;
     const currentZoom = this.map.getZoom();
-    const dynamicMax = 0.2 + ((currentZoom - this.minZoom) / (this.maxZoom - this.minZoom)) * 0.8;
+    const span = this.maxZoom - this.minZoom;
+    const zoomFrac = (currentZoom - this.minZoom) / span;
+    const maxBlur = radius * 1.5;
+    blur = Math.max(0, maxBlur * (1 - zoomFrac));
 
-    if (dynamicRadius < 1) {
-      return null;
-    }
+    const minOpacity = isFlight ? this.flightMinOpacity : this.fireMinOpacity;
 
+    const useLocalExtrema = isFlight ? true : false;
+    const max = isFlight ? 1 : undefined;
+
+    // Heatmap options
     const heatOptions = {
-      radius: dynamicRadius,
-      maxZoom: options.maxZoom || this.maxZoom,
-      max: options.max || dynamicMax,
-      gradient: this.colorGradients,
-      scaleRadius: false
+      radius:       radius,
+      blur:         blur,
+      max:          max,
+      useLocalExtrema: useLocalExtrema,
+      scaleRadius:  false,
+      gradient:     this.colorGradient,
+      minOpacity:   minOpacity
     };
 
-    const heatData = this.thermalData.map(point => [point.lat, point.lng, point.intensity]);
+    const flightOptions = {
+      radius:       radius,
+      blur:         0,
+      useLocalExtrema: false,
+      scaleRadius:  false,
+      gradient:     this.colorGradient,
+      minOpacity:   minOpacity,
+      max: 1
+    };
 
-    this.heatLayer = L.heatLayer(heatData, heatOptions);
-    this.heatLayer.addTo(this.map);
+    if (isFlight) {
+      // Render layer
+      this.heatLayer = L.heatLayer(heatData, flightOptions).addTo(this.map);
+    } else {
+      this.heatLayer = L.heatLayer(heatData, heatOptions).addTo(this.map);
+    }
 
-    if (options.fitBounds && this.thermalData.length > 0) {
-      const points = this.thermalData.map(point => [point.lat, point.lng]);
-      this.map.fitBounds(L.latLngBounds(points));
+    if (options.fitBounds && heatData.length) {
+      const pts = heatData.map(d => [d[0], d[1]]);
+      this.map.fitBounds(L.latLngBounds(pts));
     }
 
     return this.heatLayer;
