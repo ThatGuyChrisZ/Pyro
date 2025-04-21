@@ -45,7 +45,8 @@ def init_db():
             time_stamp REAL,
             heading REAL,
             speed REAL,
-            flight_id STRING
+            flight_id INTEGER NOT NULL DEFAULT -1,
+            session_id STRING
         )
         """
     )
@@ -105,7 +106,8 @@ def sync_to_firebase():
             "time_stamp": row[12],
             "heading": row[13],
             "speed": row[14],
-            "flight_id": row[15]
+            "flight_id": row[15],
+            "session_id": row[16]
         }
 
         # Add to batch only if it doesn't already exist in Firebase
@@ -130,7 +132,8 @@ def process_packet(packet, name, status="active"):
     try:
         ns24h = 24 * 60 * 60 * 1_000_000_000 
         pac_id = packet.get("pac_id", -1)
-        flight_id = packet.get("session_id", -1)
+        session_id = packet.get("session_id", -1)
+        flight_id = process_new_flight(name, session_id) or 0
         gps_data = packet.get("gps_data", [0.0, 0.0])
         latitude, longitude = gps_data[0], gps_data[1]
         alt = packet.get("alt", 0.0)
@@ -163,20 +166,19 @@ def process_packet(packet, name, status="active"):
             INSERT INTO wildfires (
                 name, pac_id, latitude, longitude, alt, high_temp, low_temp, 
                 status, date_received, time_received, sync_status, time_stamp,
-                heading, speed, flight_id
+                heading, speed, flight_id, session_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (name, pac_id, latitude, longitude, alt, high_temp, low_temp, status,
-             date_received, time_received, "pending", time_stamp, heading, speed, flight_id)
+             date_received, time_received, "pending", time_stamp, heading, speed, flight_id, session_id)
         )
 
         conn.commit()
         conn.close()
 
-        process_new_flight(name, flight_id)
         # update_fire_status(name)
-        update_flights(flight_id, name, "ulog_filename")
+        update_flights(flight_id, session_id, name, "ulog_filename")
 
         # Run Firebase sync in a parallel thread
         #sync_thread = Thread(target=sync_to_firebase)
@@ -400,21 +402,46 @@ def update_fire_status(name: str):
     conn.commit()
     conn.close()
 
-# Wildfire status updated if new flight id
-def process_new_flight(name: str, flight_id: int):
+def process_new_flight(name: str, session_id: str):
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
+
+    # Check if this session already exists in the flights table
     cursor.execute(
-        "SELECT MAX(last_flight_id) FROM wildfire_status WHERE name = ?",
+        "SELECT flight_id FROM flights WHERE name = ? AND session_id = ?",
+        (name, session_id)
+    )
+    row = cursor.fetchone()
+
+    if row:
+        conn.close()
+        return row[0]  # Return existing flight_id
+
+    # Assign new flight_id
+    cursor.execute(
+        "SELECT MAX(flight_id) FROM flights WHERE name = ?",
         (name,)
     )
     result = cursor.fetchone()
     last_flight_id = result[0] if result and result[0] is not None else 0
-    if flight_id > last_flight_id:
-        print(f"New flight {flight_id} received for {name}. Updating statistics...")
-        update_fire_status(name)
+    new_flight_id = last_flight_id + 1
+    update_fire_status(name)
+
+    # Insert new session/flight mapping
+    cursor.execute(
+        """
+        INSERT INTO flights (flight_id, name, session_id, time_started)
+        VALUES (?, ?, ?, ?)
+        """,
+        (new_flight_id, name, session_id, time.time())
+    )
+
+    conn.commit()
     conn.close()
 
+    print(f"New flight session '{session_id}' received for {name}. Assigned flight ID {new_flight_id}.")
+    return new_flight_id
+    
 def get_nearest_city(latitude: float, longitude: float) -> str:
     try:
         url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&zoom=5"
@@ -489,6 +516,7 @@ def init_flights_db():
         CREATE TABLE IF NOT EXISTS flights (
             flight_id INTEGER,
             name TEXT,
+            session_id STRING,
             ulog_filename TEXT,
             time_started REAL,
             time_ended
@@ -501,7 +529,7 @@ def init_flights_db():
 import time
 import sqlite3
 
-def update_flights(flight_id, name, ulog_filename):
+def update_flights(flight_id, session_id, name, ulog_filename):
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
@@ -513,10 +541,10 @@ def update_flights(flight_id, name, ulog_filename):
         time_started = time.time_ns()
         cursor.execute(
             """
-            INSERT INTO flights (flight_id, name, ulog_filename, time_started, time_ended)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO flights (flight_id, name, session_id, ulog_filename, time_started, time_ended)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (flight_id, name, ulog_filename, time_started, time_started)
+            (flight_id, name, session_id, ulog_filename, time_started, time_started)
         )
         conn.commit()
     else:

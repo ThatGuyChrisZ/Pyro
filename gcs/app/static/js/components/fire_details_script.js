@@ -4,6 +4,8 @@ import TimelineController from "./timeline.js";
 
 const fireName = new URLSearchParams(window.location.search).get("name");
 let map, overlay, timeline;
+let statusData = [];
+let baseLayers;
 
 document.addEventListener("DOMContentLoaded", async () => {
   setFireTitle();
@@ -12,6 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await initializeMap();
   await initializeOverlay();
   await initializeTimeline();
+  await initializeCharts();
 
   bindUIEvents();
 });
@@ -52,19 +55,42 @@ async function fetchFireCenter() {
 
 async function initializeMap() {
   const center = await fetchFireCenter();
+  map = L.map('map').setView([center.lat, center.lon], 14);
 
-  map = L.map("map").setView([center.lat, center.lon], 14);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  // base layer
+  const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 18,
-    attribution: "© OpenStreetMap contributors",
-  }).addTo(map);
+    attribution: '© OpenStreetMap contributors'
+  });
+  const satLayer = L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    { attribution: 'Tiles © Esri' }
+  );
+
+  osmLayer.addTo(map);
+  baseLayers = { osm: osmLayer, satellite: satLayer };
 
   L.marker([center.lat, center.lon])
     .addTo(map)
-    .bindTooltip(fireName || "Unknown Fire")
+    .bindTooltip(fireName || 'Unknown Fire')
     .openTooltip();
 
   displayWeather(center.lat, center.lon);
+
+  // Map / Sat Buttons
+  document.getElementById('btnMapView').addEventListener('click', () => {
+    if (map.hasLayer(baseLayers.satellite)) map.removeLayer(baseLayers.satellite);
+    if (!map.hasLayer(baseLayers.osm))       map.addLayer(baseLayers.osm);
+    document.getElementById('btnMapView').classList.add('active');
+    document.getElementById('btnSatelliteView').classList.remove('active');
+  });
+
+  document.getElementById('btnSatelliteView').addEventListener('click', () => {
+    if (map.hasLayer(baseLayers.osm))       map.removeLayer(baseLayers.osm);
+    if (!map.hasLayer(baseLayers.satellite)) map.addLayer(baseLayers.satellite);
+    document.getElementById('btnSatelliteView').classList.add('active');
+    document.getElementById('btnMapView').classList.remove('active');
+  });
 }
 
 async function initializeOverlay() {
@@ -89,8 +115,134 @@ async function initializeTimeline() {
       await overlay.loadThermalData(fireName, timestamp.toISOString());
       overlay.render();
     }
+  }); 
+}
+
+async function initializeCharts() {
+  const resp = await fetch(`/api/fire_status?name=${encodeURIComponent(fireName)}`);
+  if (!resp.ok) throw new Error("Failed to fetch fire status");
+  statusData = await resp.json();
+
+  statusData.forEach(d => d.ts = new Date(d.time_stamp));
+
+  renderAllCharts("all");
+}
+
+function renderAllCharts(scope) {
+  const now = new Date();
+  let start, end = now;
+
+  switch (scope) {
+    case "6-hours":
+      start = new Date(now.getTime() - 6 * 3600 * 1000);
+      break;
+    case "1-day":
+      start = new Date(now.getTime() - 24 * 3600 * 1000);
+      break;
+    case "3-days":
+      start = new Date(now.getTime() - 3 * 24 * 3600 * 1000);
+      break;
+    case "1-week":
+      start = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+      break;
+    case "all":
+    default:
+      const extent = d3.extent(statusData, d => d.ts);
+      start = extent[0];
+      end   = extent[1];
+      break;
+  }
+
+  const xDomain = [start, end];
+
+  renderLineChart("#size-chart",      statusData, "size",      "Fire Size", xDomain);
+  renderLineChart("#flights-chart",   statusData, "flights",   "Flights",   xDomain);
+  renderLineChart("#intensity-chart", statusData, "intensity", "Intensity", xDomain);
+}
+
+function renderLineChart(containerSelector, data, valueKey, yLabel, xDomain) {
+  const margin = { top: 20, right: 30, bottom: 30, left: 50 };
+  const width  = document.querySelector(containerSelector).clientWidth  - margin.left - margin.right;
+  const height = document.querySelector(containerSelector).clientHeight - margin.top  - margin.bottom;
+
+  d3.select(containerSelector).selectAll("svg").remove();
+
+  const svg = d3.select(containerSelector)
+    .append("svg")
+      .attr("width", width + margin.left + margin.right)
+      .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleTime()
+    .domain(xDomain || d3.extent(data, d => d.ts))
+    .range([0, width]);
+
+  const y = d3.scaleLinear()
+    .domain(d3.extent(data, d => d[valueKey])).nice()
+    .range([height, 0]);
+
+  svg.append("g")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).ticks(5));
+
+  svg.append("g")
+    .call(d3.axisLeft(y).ticks(4));
+
+  svg.append("text")
+    .attr("x", width/2)
+    .attr("y", height + margin.bottom - 5)
+    .attr("text-anchor", "middle")
+    .text("Time");
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -height/2)
+    .attr("y", -margin.left + 15)
+    .attr("text-anchor", "middle")
+    .text(yLabel);
+
+  const line = d3.line()
+    .x(d => x(d.ts))
+    .y(d => y(d[valueKey]));
+
+  svg.append("path")
+    .datum(data)
+    .attr("fill", "none")
+    .attr("stroke-width", 2)
+    .attr("stroke", "#ff4500")
+    .attr("d", line);
+}
+
+function bindUIEvents() {
+  document.getElementById("date-select")?.addEventListener("change", updateHeatmapFromInputs);
+  document.getElementById("time-select")?.addEventListener("change", updateHeatmapFromInputs);
+
+  document.querySelectorAll(".gradient-option").forEach(option => {
+    option.addEventListener("click", selectGradient);
   });
-  
+
+  document.getElementById("search-location")?.addEventListener("keydown", e => {
+    if (e.key === "Enter") searchMap();
+  });
+
+  document.getElementById("refresh-weather")?.addEventListener("click", () => {
+    const center = map?.getCenter();
+    if (center) displayWeather(center.lat, center.lng);
+  });
+
+  document.querySelectorAll(".timeline-scope-selector button")
+    .forEach(btn => {
+      btn.addEventListener("click", () => {
+        document
+          .querySelector(".timeline-scope-selector .active")
+          .classList.remove("active");
+        btn.classList.add("active");
+
+        const scope = btn.getAttribute("data-scope");
+        renderAllCharts(scope);
+      });
+    });
 }
 
 async function loadHeatmapAtTime(timestamp) {
@@ -139,22 +291,4 @@ async function searchMap() {
     console.error("Search error:", error);
     alert("Search failed");
   }
-}
-
-function bindUIEvents() {
-  document.getElementById("date-select")?.addEventListener("change", updateHeatmapFromInputs);
-  document.getElementById("time-select")?.addEventListener("change", updateHeatmapFromInputs);
-
-  document.querySelectorAll(".gradient-option").forEach(option => {
-    option.addEventListener("click", selectGradient);
-  });
-
-  document.getElementById("search-location")?.addEventListener("keydown", e => {
-    if (e.key === "Enter") searchMap();
-  });
-
-  document.getElementById("refresh-weather")?.addEventListener("click", () => {
-    const center = map?.getCenter();
-    if (center) displayWeather(center.lat, center.lng);
-  });
 }
