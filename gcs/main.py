@@ -11,14 +11,16 @@ import multiprocessing as mp
 import signal
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
                              QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit,
-                             QComboBox, QMessageBox)
+                             QComboBox, QMessageBox, QGraphicsOpacityEffect)
 from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtCore import QTimer, Qt, QUrl, QProcess
+from PyQt5.QtCore import QTimer, Qt, QUrl, QProcess, QPropertyAnimation, pyqtProperty
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtGui import QPixmap
 from serial.tools import list_ports
 from radio import start_radio
 
 radio_proc = None
+SPLASH_FADE_IN_TIME, SPLASH_FADE_OUT_TIME, SPLASH_HOLD_TIME = 5000, 0, 2000
 
 def signal_handler(sig, frame):
     global radio_proc
@@ -179,22 +181,82 @@ class GCSMainWindow(QMainWindow):
                 print("FORCE KILLING [start_radio]")
             print("GCS and backend stopped.")
 
+#
+#   THIS CLASS (FadingSplashScreen) WAS CREATED USING AN LLM (why would I program this myself??)
+#
+class FadingSplashScreen(QSplashScreen):
+    def __init__(self, pixmap):
+        super().__init__(pixmap, Qt.WindowStaysOnTopHint | Qt.SplashScreen)
+        self.setMask(pixmap.mask())
 
-def show_splash_screen():
-    splash_pix = QPixmap('assets/splash.png')
-    splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
-    splash.setMask(splash_pix.mask())
+        self.opacity_effect = QGraphicsOpacityEffect()
+        self.setGraphicsEffect(self.opacity_effect)
+        self._opacity = 0.0
+        self.opacity_effect.setOpacity(self._opacity)
+
+        self.fade_in_anim = QPropertyAnimation(self, b"opacity")
+        self.fade_in_anim.setDuration(SPLASH_FADE_IN_TIME)
+        self.fade_in_anim.setStartValue(0.0)
+        self.fade_in_anim.setEndValue(1.0)
+
+        self.fade_out_anim = QPropertyAnimation(self, b"opacity")
+        self.fade_out_anim.setDuration(SPLASH_FADE_OUT_TIME)
+        self.fade_out_anim.setStartValue(1.0)
+        self.fade_out_anim.setEndValue(0.0)
+        self.fade_out_anim.finished.connect(self.close)
+
+    def fade_in(self):
+        self.fade_in_anim.start()
+
+    def fade_out(self):
+        self.fade_out_anim.start()
+
+    def get_opacity(self):
+        return self._opacity
+
+    def set_opacity(self, value):
+        self._opacity = value
+        self.opacity_effect.setOpacity(value)
+
+    opacity = pyqtProperty(float, get_opacity, set_opacity)
+
+def show_splash_screen(app):
+    splash_pix = QPixmap("deskapp/assets/logos/basic.png")
+    splash = FadingSplashScreen(splash_pix)
     splash.show()
-    QTimer.singleShot(3000, splash.close)
+    splash.raise_()
+    splash.activateWindow()
+    app.processEvents()
+    splash.fade_in()
+
+    # Wait 
+    QTimer.singleShot(SPLASH_HOLD_TIME, splash.fade_out)
     return splash
 
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    splash = show_splash_screen()
 
-    # Show main window after splash
+    # Show splash screen with fade
+    splash = show_splash_screen(app)
+    total_splash_time = SPLASH_FADE_IN_TIME + SPLASH_FADE_OUT_TIME
+
+
+    # Show main window slightly after splash fade-out
     window = GCSMainWindow()
-    QTimer.singleShot(3000, window.show)
+
+    QTimer.singleShot(SPLASH_HOLD_TIME, window.show)  # total splash time = fade in + delay + fade out
 
     sys.exit(app.exec_())
+
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+
+#     # Show splash first
+#     splash = show_splash_screen()
+
+#     # Load main window after splash
+#     window = GCSMainWindow()
+#     QTimer.singleShot(3000, window.show)
+
+#     sys.exit(app.exec_())
