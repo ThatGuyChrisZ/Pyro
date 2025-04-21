@@ -1,6 +1,7 @@
 import time
 import math
 from database import process_packet
+import random
 
 def simulate_flight(
     name: str,
@@ -13,7 +14,7 @@ def simulate_flight(
     num_points: int = 100,
     interval: float = 5,
     radius_m: float = 50,
-    temp_variation: float = 5
+    temp_variation: float = 100
 ):
 
     R = 6_371_000
@@ -27,8 +28,8 @@ def simulate_flight(
 
         alt = start_alt + math.sin(theta) * 10 
 
-        high = start_high + math.sin(theta) * temp_variation
-        low  = start_low  + math.cos(theta) * temp_variation
+        high = start_high + random.uniform(0, 400)
+        low  = start_low  + random.uniform(-200, 100)
 
         data = {
             "name":       name,
@@ -53,7 +54,7 @@ if __name__ == "__main__":
         start_alt=392.4857,
         start_high=324.0185,
         start_low=137.6137,
-        session_id="485456862436235",
+        session_id="472435352223135",
         num_points=60,
         interval=1.0,
         radius_m=100,

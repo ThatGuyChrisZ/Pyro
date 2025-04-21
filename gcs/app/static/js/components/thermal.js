@@ -38,75 +38,86 @@ class ThermalOverlay {
       if (time_stamp || flight_id) {
         const params = new URLSearchParams();
         if (time_stamp) params.append("time_stamp", time_stamp);
-        if (flight_id) params.append("flight_id", flight_id);
+        if (flight_id)  params.append("flight_id", flight_id);
         url += "?" + params.toString();
       }
-
+  
       const response = await fetch(url);
-      const data = await response.json();
-
+      const data     = await response.json();
       if (!Array.isArray(data) || data.length === 0) {
         console.warn("No thermal data returned");
         this.thermalData = [];
         this.avgAltitude = null;
         return [];
       }
-
-      let rawPoints = data.map(point => ({
-        lat: point.latitude,
-        lng: point.longitude,
+  
+      const rawPoints = data.map(point => ({
+        lat:       point.latitude,
+        lng:       point.longitude,
         high_temp: point.high_temp,
-        low_temp: point.low_temp,
-        altitude: point.altitude,
+        low_temp:  point.low_temp,
+        altitude:  point.altitude,
         timestamp: point.time_stamp
       }));
-
-      // Most recent data comes first
-      // Only use most recent data if more data within threshold
-      rawPoints.sort((a, b) => new Date(b.timestamp / 1000000) - new Date(a.timestamp / 1000000));
-      const threshold = 50;
-      const deduped = [];
-
-      for (const point of rawPoints) {
-        const hasOverlap = deduped.some(existing => {
-          const distance = L.latLng(point.lat, point.lng).distanceTo(
-            L.latLng(existing.lat, existing.lng)
-          );
-          return distance < threshold;
+  
+      let pointsToProcess;
+      if (this.mode === "flight") {
+        // in flight mode: keep every point, no deduplication
+        pointsToProcess = rawPoints;
+      } else {
+        // in fire mode: bucket‑based deduplication
+        const THRESHOLD_METERS   = 150;
+        const METERS_PER_DEG_LAT = 111_320;
+        const bucketDegLat       = THRESHOLD_METERS / METERS_PER_DEG_LAT;
+        const buckets = new Map();
+  
+        rawPoints.forEach(pt => {
+          const metersPerDegLng = METERS_PER_DEG_LAT * Math.cos(pt.lat * Math.PI/180);
+          const bucketDegLng    = THRESHOLD_METERS / metersPerDegLng;
+          const keyLat = Math.floor(pt.lat / bucketDegLat);
+          const keyLng = Math.floor(pt.lng / bucketDegLng);
+          const key    = `${keyLat}:${keyLng}`;
+  
+          const existing = buckets.get(key);
+          if (!existing || pt.timestamp > existing.timestamp) {
+            buckets.set(key, pt);
+          }
         });
-        if (!hasOverlap) {
-          deduped.push(point);
-        }
+  
+        pointsToProcess = Array.from(buckets.values());
       }
-
-      const avgTemps = deduped.map(p => (p.high_temp + p.low_temp) / 2);
-      const minTemp = Math.min(...avgTemps);
-      const maxTemp = Math.max(...avgTemps);
-
-      const finalPoints = deduped.map(p => {
-        const avgTemp = (p.high_temp + p.low_temp) / 2;
-        let intensity = (maxTemp - minTemp) ? (avgTemp - minTemp) / (maxTemp - minTemp) : 1;
+  
+      const avgTemps = pointsToProcess.map(p => (p.high_temp + p.low_temp) / 2);
+      const minTemp  = Math.min(...avgTemps);
+      const maxTemp  = Math.max(...avgTemps);
+  
+      const finalPoints = pointsToProcess.map(p => {
+        const avgTemp   = (p.high_temp + p.low_temp) / 2;
+        const intensity = (maxTemp > minTemp)
+          ? (avgTemp - minTemp) / (maxTemp - minTemp)
+          : 1;
         return {
-          lat: p.lat,
-          lng: p.lng,
+          lat:       p.lat,
+          lng:       p.lng,
           intensity,
-          altitude: p.altitude,
+          altitude:  p.altitude,
           timestamp: p.timestamp
         };
       });
-
-      console.log("Altitude:", finalPoints.map(p => p.altitude));
-      console.log("Thermal Data Intensities after deduplication:", finalPoints.map(p => p.intensity));
-
+  
       this.thermalData = finalPoints;
-      this.avgAltitude = finalPoints.reduce((sum, p) => sum + p.altitude, 0) / finalPoints.length;
-      console.log("Avg Altitude:", this.avgAltitude);
+      this.avgAltitude = finalPoints.reduce((sum, pt) => sum + pt.altitude, 0) 
+                       / finalPoints.length;
+  
+      console.log("Using", pointsToProcess.length, "points;", 
+                  "avgAltitude =", this.avgAltitude);
       return this.thermalData;
+  
     } catch (error) {
       console.error("Error loading thermal data:", error);
       return [];
     }
-  }
+  }  
 
   calculateDynamicRadius() {
     if (!this.avgAltitude) return 25;
@@ -140,15 +151,11 @@ class ThermalOverlay {
     const radius = this.calculateDynamicRadius();
 
     let blur;
-    if (isFlight) {
-      blur = 5;
-    } else {
-      const currentZoom = this.map.getZoom();
-      const span = this.maxZoom - this.minZoom;
-      const zoomFrac = (currentZoom - this.minZoom) / span;
-      const maxBlur = radius * 1.5;
-      blur = Math.max(0, maxBlur * (1 - zoomFrac));
-    }
+    const currentZoom = this.map.getZoom();
+    const span = this.maxZoom - this.minZoom;
+    const zoomFrac = (currentZoom - this.minZoom) / span;
+    const maxBlur = radius * 1.5;
+    blur = Math.max(0, maxBlur * (1 - zoomFrac));
 
     const minOpacity = isFlight ? this.flightMinOpacity : this.fireMinOpacity;
 
@@ -182,7 +189,7 @@ class ThermalOverlay {
     } else {
       this.heatLayer = L.heatLayer(heatData, heatOptions).addTo(this.map);
     }
-s
+
     if (options.fitBounds && heatData.length) {
       const pts = heatData.map(d => [d[0], d[1]]);
       this.map.fitBounds(L.latLngBounds(pts));

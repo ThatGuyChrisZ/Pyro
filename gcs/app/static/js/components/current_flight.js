@@ -73,16 +73,31 @@ function pollForNewFlight() {
 }
 
 function appendPoint(lat, lng, temps, altitude = null, timestamp = null) {
-  const [high_temp, low_temp] = temps;
-  const avgTemp = (high_temp + low_temp) / 2;
+  const [highTemp, lowTemp] = temps;
+  const rawTemp = (highTemp + lowTemp) / 2;
+
   overlay.thermalData = overlay.thermalData || [];
+
   overlay.thermalData.push({
     lat,
     lng,
-    intensity: avgTemp,
+    rawTemp,
     altitude,
     timestamp
   });
+
+  const rawTemps = overlay.thermalData.map(pt => pt.rawTemp);
+  const minTemp = Math.min(...rawTemps);
+  const maxTemp = Math.max(...rawTemps);
+
+  overlay.thermalData.forEach(pt => {
+    pt.intensity = (maxTemp > minTemp)
+      ? (pt.rawTemp - minTemp) / (maxTemp - minTemp)
+      : 1;
+  });
+
+  const altitudes = overlay.thermalData.map(pt => pt.altitude || 0);
+  overlay.avgAltitude = altitudes.reduce((sum, a) => sum + a, 0) / altitudes.length;
 }
 
 async function initializeMap() {
@@ -202,6 +217,7 @@ function drawPoint(pt) {
   }
 
   appendPoint(pt.latitude, pt.longitude, [pt.high_temp, pt.low_temp]);
+  console.log("thermal data: ", overlay.thermalData)
   overlay.render({ fitBounds: false });
 
   map.panTo([pt.latitude, pt.longitude]);
