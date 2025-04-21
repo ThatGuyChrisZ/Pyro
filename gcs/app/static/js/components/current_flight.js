@@ -1,144 +1,208 @@
-import FlightTimelineController from "./flight_timeline.js";
-import ThermalOverlay          from "./thermal.js";
+import ThermalOverlay from "./thermal.js";
 
-const fireName = new URLSearchParams(window.location.search).get("name");
-let flightId     = new URLSearchParams(window.location.search).get("flight_id");
+const fireName     = new URLSearchParams(window.location.search).get("name");
+const flightId     = new URLSearchParams(window.location.search).get("flight_id");
+const DATA_INTERVAL = 2000;  
 
-let map, timeline, overlay;
-let pathLine, fullFlightData = [];
-let lastNs = 0;
+let map, overlay, pathLine;
+let lastTimestamp  = 0;
+let dataTimer;
+let knownFlightId = 0;
 
-const FLIGHT_POLL_INTERVAL = 5000;
-const DATA_POLL_INTERVAL   = 2000;
+document.addEventListener("DOMContentLoaded", async () => {
+  setTitle();
 
-window.addEventListener("DOMContentLoaded", async () => {
+  // Waiting for new flight
+  if (flightId == "null" || !flightId) {
+    await fetchExistingFlights();
+    pollForNewFlight();
+    return; 
+  }
+
+  // Live flight mode
   await initializeMap();
-  await initializeOverlay();
-  await initializeTimeline();
-  startPolling();
+  overlay = new ThermalOverlay(map, { mode: "flight" });
+  await loadFlightPath();
+  startDataPolling();
 });
+
+
+function setTitle() {
+  const title = document.querySelector("h2");
+  if (title) {
+    if (flightId) {
+      title.textContent = `${fireName} – Flight ${flightId} (LIVE)`;
+    } else {
+      title.textContent = `${fireName} – Awaiting new flight…`;
+    }
+  }
+}
+
+function flightsURL() {
+  return `/api/flights/${encodeURIComponent(fireName)}`;
+}
+
+function thermalURL() {
+  let url = `/api/thermal/${encodeURIComponent(fireName)}`;
+  if (flightId) {
+    url += `?flight_id=${encodeURIComponent(flightId)}`;
+  }
+  return url;
+}
+
+async function fetchExistingFlights() {
+  const res = await fetch(flightsURL());
+  const flights = await res.json();
+  const ids = flights.map(f => f.flight_id ?? f.id);
+  knownFlightId = ids.length ? Math.max(...ids) : 0;
+}
+
+function pollForNewFlight() {
+  setInterval(async () => {
+    const res = await fetch(flightsURL());
+    const flights = await res.json();
+    const ids = flights.map(f => f.flight_id ?? f.id);
+    const maxId = ids.length ? Math.max(...ids) : 0;
+
+    if (maxId > knownFlightId) {
+      const url = new URL(window.location.href);
+      url.searchParams.set("flight_id", maxId);
+      window.location.replace(url);
+    }
+  }, DATA_INTERVAL);
+}
+
+function appendPoint(lat, lng, temps, altitude = null, timestamp = null) {
+  const [high_temp, low_temp] = temps;
+  const avgTemp = (high_temp + low_temp) / 2;
+  overlay.thermalData = overlay.thermalData || [];
+  overlay.thermalData.push({
+    lat,
+    lng,
+    intensity: avgTemp,
+    altitude,
+    timestamp
+  });
+}
 
 async function initializeMap() {
   const center = await fetchFireCenter();
-  map = L.map('map').setView([center.lat, center.lon], 14);
+  const container = document.getElementById("map");
 
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 18,
-    attribution: '© OpenStreetMap contributors'
-  });
-  const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles © Esri'
-  });
+  if (map != undefined) {
+    map.off();
+    map = map.remove();
+    map = null;
+  }
 
-  osm.addTo(map);
+  //completely destroy map and identifiers left behind by leaflet
+  container.innerHTML = '';
+  container.className = '';
+  delete container._leaflet_id;
+
+  map = L.map("map").setView([center.lat, center.lon], 14);
+
+  const osm = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 18, attribution: "© OpenStreetMap contributors" }
+  ).addTo(map);
+
+  const sat = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { attribution: "Tiles © Esri" }
+  );
+
+  document.getElementById("btnMapView").addEventListener("click", () => {
+    map.hasLayer(sat) && map.removeLayer(sat);
+    !map.hasLayer(osm) && map.addLayer(osm);
+    toggleActive("btnMapView","btnSatelliteView");
+  });
+  document.getElementById("btnSatelliteView").addEventListener("click", () => {
+    map.hasLayer(osm) && map.removeLayer(osm);
+    !map.hasLayer(sat) && map.addLayer(sat);
+    toggleActive("btnSatelliteView","btnMapView");
+  });
 
   L.marker([center.lat, center.lon])
-   .addTo(map)
-   .bindTooltip(fireName)
-   .openTooltip();
-
-  document.getElementById('btnMapView')
-    .addEventListener('click', () => switchLayer(osm, sat));
-  document.getElementById('btnSatelliteView')
-    .addEventListener('click', () => switchLayer(sat, osm));
+    .addTo(map)
+    .bindTooltip(fireName || "Unknown Fire")
+    .openTooltip();
 }
 
-function switchLayer(addLayer, removeLayer) {
-  if (map.hasLayer(removeLayer)) map.removeLayer(removeLayer);
-  if (!map.hasLayer(addLayer))    map.addLayer(addLayer);
-  document.getElementById('btnMapView').classList.toggle('active', addLayer === map._layers[Object.keys(map._layers)[1]]);
-  document.getElementById('btnSatelliteView').classList.toggle('active', addLayer !== map._layers[Object.keys(map._layers)[1]]);
+function toggleActive(onId, offId) {
+  document.getElementById(onId).classList.add("active");
+  document.getElementById(offId).classList.remove("active");
 }
 
-async function initializeOverlay() {
-  overlay = new ThermalOverlay(map);
-}
-
-async function initializeTimeline() {
-  timeline = new FlightTimelineController("timeline-container", {
-    allowScrubbing: false,
-    showTime:      true
-  });
-}
-
-// Start polling for flights and data
-function startPolling() {
-  pollForFlightChange();
-  setInterval(pollForFlightChange, FLIGHT_POLL_INTERVAL);
-}
-
-// Check for new flight entries
-async function pollForFlightChange() {
+async function fetchFireCenter() {
   try {
-    const res = await fetch(
-      `/api/live_flight?name=${encodeURIComponent(fireName)}`
-    );
-    if (!res.ok) return;
-    const flights = await res.json();
-    if (!flights.length) return;
+    const res = await fetch("/wildfire_markers?filter=active");
+    if (!res.ok) throw new Error(res.statusText);
+    const arr = await res.json();
+    const f = arr.find(x => x.name === fireName);
+    return f
+      ? { lat: f.avg_latitude, lon: f.avg_longitude }
+      : { lat: 39.3, lon: -119.8 };
+  } catch {
+    return { lat: 39.3, lon: -119.8 };
+  }
+}
 
-    const latest = flights
-      .reduce((max, f) => Math.max(max, f.flight_id), flights[0].flight_id)
-      .toString();
+async function loadFlightPath() {
+  const res = await fetch( thermalURL(), { cache: "no-store" } );
+  if (!res.ok) throw new Error(res.statusText);
+  const payload = await res.json();
 
-    if (latest !== flightId) {
-      flightId = latest;
-      resetLiveView();
-      pollForData();
-      setInterval(pollForData, DATA_POLL_INTERVAL);
+  const points = Array.isArray(payload)
+    ? payload
+    : (payload.wildfire_data || []);
+
+  const coords = [];
+  for (const pt of points) {
+    coords.push([pt.latitude, pt.longitude]);
+    lastTimestamp = Math.max(lastTimestamp, pt.time_stamp);
+    appendPoint(pt.latitude, pt.longitude, [pt.high_temp, pt.low_temp]);
+  }
+
+  if (coords.length) {
+    pathLine = L.polyline(coords, { color: "red" }).addTo(map);
+    map.fitBounds(pathLine.getBounds());
+  }
+
+  overlay.render({ fitBounds: false });
+}
+
+function startDataPolling() {
+  if (dataTimer) clearInterval(dataTimer);
+  fetchNewPoints();
+  dataTimer = setInterval(fetchNewPoints, DATA_INTERVAL);
+}
+
+async function fetchNewPoints() {
+  const res = await fetch( thermalURL(), { cache: "no-store" } );
+  if (!res.ok) throw new Error(res.statusText);
+  const payload = await res.json();
+  const points = Array.isArray(payload)
+    ? payload
+    : (payload.wildfire_data || []);
+
+  for (const pt of points) {
+    if (pt.time_stamp > lastTimestamp) {
+      lastTimestamp = pt.time_stamp;
+      drawPoint(pt);
     }
-  } catch (err) {
-    console.error('Flight poll error:', err);
   }
 }
 
-// Reset view for a new flight
-function resetLiveView() {
-  document.querySelector('h2').textContent = `${fireName} – Flight ${flightId} (LIVE)`;
-  fullFlightData = [];
-  lastNs = 0;
-
-  if (pathLine) {
-    map.removeLayer(pathLine);
-    pathLine = null;
-  }
-  overlay.reset();
-  timeline.clear();
-}
-
-// Poll for new data
-async function pollForData() {
-  try {
-    const res = await fetch(
-      `/api/live_flight?name=${encodeURIComponent(fireName)}`
-      + `&flight_id=${flightId}`
-      + `&after=${lastNs}`
-    );
-    if (!res.ok) return;
-
-    const { wildfire_data } = await res.json();
-    for (const pt of wildfire_data) {
-      lastNs = Math.max(lastNs, pt.time_stamp);
-      const ts = new Date(pt.time_stamp / 1e6);
-      appendToMapAndOverlay(ts, pt.latitude, pt.longitude, [pt.high_temp, pt.low_temp]);
-    }
-  } catch (err) {
-    console.error('Data poll error:', err);
-  }
-}
-
-// Append new point to map, overlay, and timeline
-function appendToMapAndOverlay(ts, lat, lng, temps) {
-  fullFlightData.push({ ts, lat, lng, temperatures: temps });
-
+function drawPoint(pt) {
   if (!pathLine) {
-    pathLine = L.polyline([[lat, lng]], { color: 'red' }).addTo(map);
-    map.panTo([lat, lng]);
+    pathLine = L.polyline([[pt.latitude, pt.longitude]], { color: "red" }).addTo(map);
   } else {
-    pathLine.addLatLng([lat, lng]);
-    map.panTo([lat, lng], { animate: false });
+    pathLine.addLatLng([pt.latitude, pt.longitude]);
   }
 
-  overlay.appendPoint(lat, lng, temps);
-  timeline.addPoint(ts);
+  appendPoint(pt.latitude, pt.longitude, [pt.high_temp, pt.low_temp]);
+  overlay.render({ fitBounds: false });
+
+  map.panTo([pt.latitude, pt.longitude]);
 }

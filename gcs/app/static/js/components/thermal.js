@@ -1,22 +1,29 @@
 class ThermalOverlay {
-  constructor(mapInstance) {
+  constructor(mapInstance, { mode = "fire" } = {}) {
     this.map = mapInstance;
+    this.mode = mode;
     this.heatLayer = null;
     this.thermalData = [];
     this.avgAltitude = null;
     this.colorGradient = {
-      0.0: "rgba(0, 0, 255, 0)",
-      0.4: "blue",
-      0.6: "lime",
-      0.7: "yellow",
-      0.8: "orange",
-      1.0: "red"
+      0.0: "rgba(0,0,255, 0)",  
+      0.4: "rgba(0,0,255, 0.2)",
+      0.6: "rgba(0,255,0, 0.4)", 
+      0.8: "rgba(255,255,0,0.7)",
+      1.0: "rgba(255,  0,  0,1.0)"
     };
 
     this.minZoom = 5;
     this.maxZoom = 18;
     this.map.setMinZoom(this.minZoom);
     this.map.setMaxZoom(this.maxZoom);
+
+    // Fire mode
+    this.fireCutoff = 0.20;
+    this.fireMinOpacity = 0.35;
+    // Flight mode
+    this.flightCutoff = 0.0;
+    this.flightMinOpacity = 0.5;
 
     this.map.on("zoomend", () => {
       if (this.heatLayer) {
@@ -117,37 +124,68 @@ class ThermalOverlay {
     
     return pixelRadius;
   }
-  
 
   render(options = {}) {
     if (this.heatLayer) {
       this.map.removeLayer(this.heatLayer);
     }
 
-    const dynamicRadius = this.calculateDynamicRadius();
-    const currentZoom = this.map.getZoom();
-    const dynamicMax = 0.2 + ((currentZoom - this.minZoom) / (this.maxZoom - this.minZoom)) * 0.8;
+    const isFlight = this.mode === "flight";
+    const cutoff = isFlight ? this.flightCutoff : this.fireCutoff;
 
-    if (dynamicRadius < 1) {
-      return null;
+    const heatData = this.thermalData
+      .filter(p => p.intensity > cutoff)
+      .map(p => [p.lat, p.lng, p.intensity]);
+
+    const radius = this.calculateDynamicRadius();
+
+    let blur;
+    if (isFlight) {
+      blur = 5;
+    } else {
+      const currentZoom = this.map.getZoom();
+      const span = this.maxZoom - this.minZoom;
+      const zoomFrac = (currentZoom - this.minZoom) / span;
+      const maxBlur = radius * 1.5;
+      blur = Math.max(0, maxBlur * (1 - zoomFrac));
     }
 
+    const minOpacity = isFlight ? this.flightMinOpacity : this.fireMinOpacity;
+
+    const useLocalExtrema = isFlight ? true : false;
+    const max = isFlight ? 1 : undefined;
+
+    // Heatmap options
     const heatOptions = {
-      radius: dynamicRadius,
-      maxZoom: options.maxZoom || this.maxZoom,
-      max: options.max || dynamicMax,
-      gradient: this.colorGradients,
-      scaleRadius: false
+      radius:       radius,
+      blur:         blur,
+      max:          max,
+      useLocalExtrema: useLocalExtrema,
+      scaleRadius:  false,
+      gradient:     this.colorGradient,
+      minOpacity:   minOpacity
     };
 
-    const heatData = this.thermalData.map(point => [point.lat, point.lng, point.intensity]);
+    const flightOptions = {
+      radius:       radius,
+      blur:         0,
+      useLocalExtrema: false,
+      scaleRadius:  false,
+      gradient:     this.colorGradient,
+      minOpacity:   minOpacity,
+      max: 1
+    };
 
-    this.heatLayer = L.heatLayer(heatData, heatOptions);
-    this.heatLayer.addTo(this.map);
-
-    if (options.fitBounds && this.thermalData.length > 0) {
-      const points = this.thermalData.map(point => [point.lat, point.lng]);
-      this.map.fitBounds(L.latLngBounds(points));
+    if (isFlight) {
+      // Render layer
+      this.heatLayer = L.heatLayer(heatData, flightOptions).addTo(this.map);
+    } else {
+      this.heatLayer = L.heatLayer(heatData, heatOptions).addTo(this.map);
+    }
+s
+    if (options.fitBounds && heatData.length) {
+      const pts = heatData.map(d => [d[0], d[1]]);
+      this.map.fitBounds(L.latLngBounds(pts));
     }
 
     return this.heatLayer;

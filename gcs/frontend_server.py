@@ -781,7 +781,7 @@ def main():
     init_db()
 
     # Optionally import test packets
-    import_packets_from_file('test_packets.txt')
+    import_packets_from_file('all_fire_packets.txt')
     
     # Parse command line arguments
     parse_command_line()
