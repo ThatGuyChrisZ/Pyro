@@ -1,5 +1,3 @@
-// flight_timeline.js
-
 class FlightTimelineController {
     constructor(containerId, options = {}) {
       this.container = document.getElementById(containerId);
