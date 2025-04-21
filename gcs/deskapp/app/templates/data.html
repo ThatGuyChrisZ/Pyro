@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Wildfire Data{% end %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Wildfire Database</h2>
+  <p>Browse collected wildfire data…</p>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <div class="row g-3 align-items-center">
+        <div class="col-auto">
+          <label for="fire-filter" class="col-form-label">Filter by Fire:</label>
+        </div>
+        <div class="col-auto">
+          <select id="fire-filter" class="form-select">
+          </select>
+        </div>
+        <div class="col-auto">
+          <a href="/download_csv" class="btn btn-primary">Export CSV</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div id="table-container" class="table-responsive"></div>
+    </div>
+  </div>
+</div>
+{% end %}
+
+{% block extra_js %}
+<script src="{{ static_url('js/components/data_script.js') }}"></script>
+{% end %}

@@ -11,23 +11,28 @@ import multiprocessing as mp
 import signal
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
                              QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit,
-                             QComboBox, QMessageBox, QGraphicsOpacityEffect)
+                             QComboBox, QMessageBox, QGraphicsOpacityEffect, QTabWidget)
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import QTimer, Qt, QUrl, QProcess, QPropertyAnimation, pyqtProperty
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtGui import QPixmap
 from serial.tools import list_ports
 from radio import start_radio
+from deskapp.backend_server import start_server
 
 radio_proc = None
+server_proc = None
 SPLASH_FADE_IN_TIME, SPLASH_FADE_OUT_TIME, SPLASH_HOLD_TIME = 5000, 0, 2000
 
 def signal_handler(sig, frame):
     global radio_proc
+    global server_proc
     if radio_proc is not None and radio_proc.is_alive():
         print("Terminating radio_proc")
         radio_proc.terminate()
         radio_proc.join()
+        server_proc.terminate()
+        server_proc.join()
     sys.exit(0)
 
 # Register cleanup for Ctrl+C or parent kill
@@ -43,8 +48,36 @@ class GCSMainWindow(QMainWindow):
         self.prog_mode = None
         self.trans_port = None
         self.call_sign = None
+        self.flight_session_name = None
         self.q_transciever_functional = mp.Queue()
 
+        # Tab Widget
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
+
+        # Add Main Tab
+        self.main_tab = QWidget()
+        self.tabs.addTab(self.main_tab, "Main")
+        self.init_main_tab()
+
+        # Add Map Tab
+        self.map_tab = QWidget()
+        self.tabs.addTab(self.map_tab, "Map")
+        self.init_map_tab()
+
+        # Add Connection Tab
+        self.radio_tab = QWidget()
+        self.tabs.addTab(self.radio_tab, "Connection")
+        self.init_radio_tab()
+
+        # Start Server Process!!!
+        self.server_process = mp.Process(
+            target=start_server,
+            args=()
+        )
+        self.server_process.start()
+
+    def init_main_tab(self):
         # Layout
         layout = QVBoxLayout()
 
@@ -59,6 +92,11 @@ class GCSMainWindow(QMainWindow):
         # TO BE FAA-LICENSED TO UTILIZE
         # RADIOS WITHIN A SPECIFIC FREQ
         # (HAM RADIO)
+
+        # Flight Session Name Input
+        self.flight_session_name_input = QLineEdit()
+        self.flight_session_name_input.setPlaceholderText("Flight Session Name")
+        layout.addWidget(self.flight_session_name_input)
 
         # Program Mode Dropdown
         self.prog_mode_dropdown = QComboBox()
@@ -91,15 +129,55 @@ class GCSMainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         layout.addWidget(self.stop_button)
 
-        # Container widget
-        container = QWidget()
-        container.setLayout(layout)
-        self.setCentralWidget(container)
+        self.main_tab.setLayout(layout)
+
+    def init_map_tab(self):
+        layout = QVBoxLayout()
+
+        # Create the QWebEngineView widget to display the webpage
+        self.webview = QWebEngineView()
+        layout.addWidget(self.webview)
+
+        # Initially set the layout for the map tab
+        self.map_tab.setLayout(layout)
+
+        # Try to load the map immediately
+        self.try_load_map()
+
+    def try_load_map(self):
+        # Attempt to load the page
+        url = "http://localhost:8000/"
+        
+        # Convert the string URL to a QUrl object
+        qurl = QUrl(url)
+
+        # Check if the page is loaded successfully
+        def on_load_finished(success):
+            if success:
+                pass
+            else:
+                if self.prog_mode != 0:
+                    print("Failed to load map. Retrying...")
+                self.map_label.setText("Retrying to load map...")
+
+        # Set the callback for when the page has finished loading
+        self.webview.loadFinished.connect(on_load_finished)
+
+        # Load the map page
+        self.webview.setUrl(qurl)
+
+
+    def init_radio_tab(self):
+        layout = QVBoxLayout()
+        self.radio_status_label = QLabel("Radio diagnostics and performance metrics will display here.")
+        layout.addWidget(self.radio_status_label)
+        self.radio_tab.setLayout(layout)
 
     def start_backend_processes(self):
         self.prog_mode = int(self.prog_mode_dropdown.currentText()[0])
         self.trans_port = self.transciever_port_dropdown.currentText()
         self.call_sign = self.callsign_input.text()
+        self.flight_session_name = self.flight_session_name_input.text()
 
         if len(self.call_sign) != 6:
             QMessageBox.critical(self, "Invalid Callsign", "Callsign must be exactly 6 characters long.")
@@ -115,7 +193,7 @@ class GCSMainWindow(QMainWindow):
         # Start fresh process
         self.radio_process = mp.Process(
             target=start_radio,
-            args=(self.prog_mode, self.trans_port, self.call_sign, self.q_transciever_functional)
+            args=(self.prog_mode, self.trans_port, self.call_sign, self.flight_session_name, self.q_transciever_functional)
         )
         self.radio_process.start()
 
@@ -146,7 +224,7 @@ class GCSMainWindow(QMainWindow):
     
     def stop_backend_processes(self):
         if self.radio_process and self.radio_process.is_alive():
-            self.close_child_processes()
+            self.close_radio_child_processes()
 
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -173,13 +251,23 @@ class GCSMainWindow(QMainWindow):
         else:
             event.accept()
 
-    def close_child_processes(self):
+    def close_radio_child_processes(self):
         self.radio_process.terminate()
         self.radio_process.join(timeout=5)
         if self.radio_process.is_alive():
             if self.prog_mode != 0:
                 print("FORCE KILLING [start_radio]")
-            print("GCS and backend stopped.")
+                print("GCS and backend stopped.")
+
+    def close_child_processes(self):
+        self.radio_process.terminate()
+        self.radio_process.join(timeout=5)
+        self.server_process.terminate()
+        self.server_process.join(timeout=5)
+        if self.radio_process.is_alive():
+            if self.prog_mode != 0:
+                print("FORCE KILLING [start_radio] and [start_server]")
+                print("GCS and backend stopped.")
 
 #
 #   THIS CLASS (FadingSplashScreen) WAS CREATED USING AN LLM (why would I program this myself??)
@@ -248,15 +336,3 @@ if __name__ == "__main__":
     QTimer.singleShot(SPLASH_HOLD_TIME, window.show)  # total splash time = fade in + delay + fade out
 
     sys.exit(app.exec_())
-
-# if __name__ == "__main__":
-#     app = QApplication(sys.argv)
-
-#     # Show splash first
-#     splash = show_splash_screen()
-
-#     # Load main window after splash
-#     window = GCSMainWindow()
-#     QTimer.singleShot(3000, window.show)
-
-#     sys.exit(app.exec_())

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Active Fires | Pyro{% end %}
+{% block fires_active %}active{% end %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+<style>
+  #fireMap {
+    height: 600px;
+    width: 100%;
+    border-radius: 6px;
+  }
+
+  .fire-info-panel {
+    padding: 15px;
+    background-color: rgba(255, 255, 255, 0.95);
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .leaflet-tooltip {
+    font-size: 14px;
+    font-weight: bold;
+  }
+</style>
+{% end %}
+
+{% block content %}
+<div class="row">
+  <!-- Map Section -->
+  <div class="col-md-9">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Wildfire Map</h5>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-outline-secondary active" id="btnMapView">Map</button>
+          <button class="btn btn-sm btn-outline-secondary" id="btnSatelliteView">Satellite</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="fireMap"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info Panel -->
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">Fire Information</h5>
+      </div>
+      <div class="card-body">
+        <div id="fireInfoPanel" class="fire-info-panel">
+          <p class="text-muted text-center">Click on a fire marker to view details</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% end %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="{{ static_url('js/pages/fires.js') }}"></script>
+
+<script>
+  // Base layer switching
+  document.getElementById('btnMapView').addEventListener('click', () => {
+    if (window.firesPage?.map) {
+      window.firesPage.map.eachLayer(layer => {
+        if (layer instanceof L.TileLayer) window.firesPage.map.removeLayer(layer);
+      });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(window.firesPage.map);
+    }
+  });
+
+  document.getElementById('btnSatelliteView').addEventListener('click', () => {
+    if (window.firesPage?.map) {
+      window.firesPage.map.eachLayer(layer => {
+        if (layer instanceof L.TileLayer) window.firesPage.map.removeLayer(layer);
+      });
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri'
+      }).addTo(window.firesPage.map);
+    }
+  });
+</script>
+{% end %}
