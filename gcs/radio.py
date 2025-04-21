@@ -29,6 +29,7 @@ from database import process_packet
 import sys
 import os
 import subprocess
+import signal
 
 # ------------------ #
 # NETWORK MANAGEMENT #
@@ -323,7 +324,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
 #   Description:                                                       #
 #   Return: None                                                       #
 ########################################################################
-def start_radio(prog_mode, usb_port_trans, call_sign):
+def start_radio(prog_mode, usb_port_trans, call_sign, q_transciever_functional):
     # mp.set_start_method('fork')    # 'spawn' : for windows deployment (and safe on linux)
                                     #           + safer for I/O bound and thread-sensitive tasks
                                     #           + safer with multithreading and c-extension libaries
@@ -336,43 +337,43 @@ def start_radio(prog_mode, usb_port_trans, call_sign):
                                     #           - worse for CPU-bound processes, slower
                                     # 'fork' : opposite of 'spawn' (see above)
                                     # 'forkserver' : good compromise of 'spawn' and 'fork' (only compatible with unix-based systems)
-    # ---------------- #
-    # GET PROGRAM MODE #
-    # ---------------- #
-    # parser = argparse.ArgumentParser(description="Provide the mode of the program you wish to run.")
-    # parser.add_argument("--mode", type=int, help="MODES: 0-Basic | 1-Debug | 2-Local Sys Debug")
-    # args = parser.parse_args()
-    # if args.mode is not None:  # Avoid overwriting if mode isn't provided
-    #     prog_mode = args.mode
-    # if prog_mode != 2:
-    #     successfully_connect_to_transciever = False
-    #     while successfully_connect_to_transciever is False:
-    #         successfully_connect_to_transciever = True
-    #         usb_port_trans = input("Enter the usb port the tranceiver is plugged into (type \'q\' to exit): ")
-    #         if usb_port_trans == 'q' or usb_port_trans == 'Q':
-    #             quit()
-    #         else:
-    #             try:
-    #                 rf_serial = serial.Serial(port='/dev/ttyUSB'+usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-    #             except serial.SerialException as e:
-    #                 print(f"MAIN: ERROR CONNECTING TO TRANSCIEVER ON PORT \'/dev/ttyUSB{usb_port_trans}\', PLEASE TRY AGAIN . . .")
-    #                 successfully_connect_to_transciever = False
-    print(f"PROG:{prog_mode}, TRANS:{usb_port_trans}")
+
+    # Track live processes for cleanup
+    processes = []
+
+    def cleanup(*args):
+        if prog_mode != 0:
+            print("[start_radio] Cleaning up...")
+        for p in processes:
+            if p.is_alive():
+                if prog_mode != 0:
+                    print(f"[start_radio] Terminating {p.name}")
+                p.terminate()
+                p.join()
+        sys.exit(0)
+
+    # ----------------- #
+    # GET rf_serial SET #
+    # ----------------- #
+    if prog_mode != 0:
+        print(f"PROG:{prog_mode}, TRANS:{usb_port_trans}")
     if prog_mode != 2:
-        successfully_connect_to_transciever = False
-        while successfully_connect_to_transciever is False:
-            successfully_connect_to_transciever = True
-            try:
-                rf_serial = serial.Serial(port='/dev/ttyUSB'+usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
-            except serial.SerialException as e:
-                print(f"MAIN: ERROR CONNECTING TO TRANSCIEVER ON PORT \'/dev/ttyUSB{usb_port_trans}\', PLEASE TRY AGAIN . . .")
-                successfully_connect_to_transciever = False
+        try:
+            rf_serial = serial.Serial(port=usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+        except serial.SerialException as e:
+            if prog_mode != 0:
+                print(f"MAIN: ERROR CONNECTING TO TRANSCIEVER ON PORT \'{usb_port_trans}\', PLEASE TRY AGAIN . . .")
+            q_transciever_functional.put(False)
+        q_transciever_functional.put(True)
+    # if using mode 2 (debug local) -> no need for tranciever and rf connection . . .
+    else:
+        q_transciever_functional.put(True)
 
     # ------------------ #
     # START MAIN PROCESS #
     # ------------------ #
     if prog_mode != 0:
-        print(f"Starting Main process, mode {prog_mode}")
+        print(f"Starting Radio process, mode {prog_mode}")
     q_unser_packets = mp.Queue()
     q_log = mp.Queue()
 
@@ -380,6 +381,23 @@ def start_radio(prog_mode, usb_port_trans, call_sign):
     p_rec_and_dec = mp.Process(target=receive_and_decode_packets, args=(prog_mode, usb_port_trans, q_unser_packets, q_log, call_sign,))
     p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets,))
 
-    p_rad_log_listener.start()
-    p_rec_and_dec.start()
-    p_send_pac_to_serv.start()
+    processes.extend([p_rad_log_listener, p_rec_and_dec, p_send_pac_to_serv])
+    try:
+        for p in processes:
+            p.start()
+
+        while True:
+            time.sleep(1)  # keep alive but checkable
+
+    except (KeyboardInterrupt, SystemExit):
+        print("[start_radio] KeyboardInterrupt/SystemExit detected")
+
+    finally:
+        if prog_mode != 0:
+            print("[start_radio] Cleaning up child processes")
+        for p in processes:
+            if p.is_alive():
+                p.terminate()
+                p.join()
+        if prog_mode != 0:
+            print("[start_radio] children killed")

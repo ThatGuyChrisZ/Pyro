@@ -30,3 +30,7 @@ gcs/deskapp/firebase_credentials.json
 gcs/wildfire_data.db
 
 gcs/Deskapp/wildfire_data.db
+
+gcs/wildfire_data.db-shm
+
+gcs/wildfire_data.db-wal
