@@ -9,6 +9,8 @@ from firebase_admin import credentials, db
 import time
 from threading import Thread
 
+_packet_counts: dict[str, int] = {}
+
 # Firebase Config
 FIREBASE_CREDENTIALS_PATH = "firebase_credentials.json"
 FIREBASE_DB_URL = "https://pyro-fire-tracking-default-rtdb.firebaseio.com/"
@@ -177,7 +179,11 @@ def process_packet(packet, name, status="active"):
         conn.commit()
         conn.close()
 
-        # update_fire_status(name)
+        _packet_counts[name] = _packet_counts.get(name, 0) + 1
+        if _packet_counts[name] >= 100:
+            update_fire_status(name)
+            _packet_counts[name] = 0
+
         update_flights(flight_id, session_id, name, "ulog_filename")
 
         # Run Firebase sync in a parallel thread

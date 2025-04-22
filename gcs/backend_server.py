@@ -842,3 +842,6 @@ def start_server():
     except KeyboardInterrupt:
         print("Shutting down backend server.")
         p1.terminate()
+
+if __name__ == "__main__":
+    start_server()

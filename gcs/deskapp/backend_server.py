@@ -805,16 +805,7 @@ def avionics_integration(output):
             output.put(export)
             enabled = 1
 
-def main():
-    # Initialize database
-    init_db()
-
-    # Optionally import test packets
-    import_packets_from_file('all_fire_packets.txt')
-    
-    # Parse command line arguments
-    parse_command_line()
-    
+def start_app():
     # Create and start the app
     app = make_app()
     app.listen(options.port)
@@ -823,11 +814,24 @@ def main():
     print(f"Debug mode: {options.debug}")
 
     tornado.ioloop.IOLoop.current().start()
+
+
+def start_server():
+    # Initialize databases
+    init_db()
+
+    # Optionally import test packets
+    import_packets_from_file('all_fire_packets.txt')
+    
+    # Parse command line arguments
+    parse_command_line()
     
     # Start the avionics integration process
     q1 = mp.Queue()
     p1 = mp.Process(target=avionics_integration, args=(q1,))
+    p_server = mp.Process(target=start_app)
     p1.start()
+    p_server.start()
     
     try:
         while True:
@@ -838,6 +842,3 @@ def main():
     except KeyboardInterrupt:
         print("Shutting down backend server.")
         p1.terminate()
-
-if __name__ == "__main__":
-    main()
