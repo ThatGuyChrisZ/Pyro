@@ -21,7 +21,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtGui import QPixmap
 from serial.tools import list_ports
 from radio import start_radio
-from Deskapp.backend_server import start_server
+from backend_server import start_server
 
 radio_proc = None
 server_proc = None

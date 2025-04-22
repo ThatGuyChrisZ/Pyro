@@ -48,7 +48,7 @@ def simulate_flight(
 
 if __name__ == "__main__":
     simulate_flight(
-        name="test3",
+        name="test4",
         start_lat=39.292778,
         start_lon=-116.845,
         start_alt=392.4857,

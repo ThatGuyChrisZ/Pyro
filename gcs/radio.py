@@ -140,7 +140,7 @@ def radio_log_listener(q_log):
 
 
 def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissions, corrupted, q_log):
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = time.strftime("%Y-%m-%d %H-%M-%S")
     
     # --- #
     # LOG #
@@ -183,6 +183,17 @@ def aggregate_logs(session_ids):
 def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q_log, call_sign):
     if prog_mode != 0:
         print(f"RD: STARTING PROCESS")
+
+    if prog_mode != 2:
+        rf_serial = serial.Serial(
+            port=rf_serial_usb_port,
+            baudrate=57600,
+            timeout=10,
+            rtscts=True,
+            dsrdtr=True,
+            write_timeout=10
+        )
+        print(f"RD: Listening on {rf_serial_usb_port}…")
 
     # UDP socket debug mode (local)
     if prog_mode == 2:
@@ -387,7 +398,8 @@ def start_radio(prog_mode, usb_port_trans, call_sign, flight_session_name, q_tra
         print(f"PROG:{prog_mode}, TRANS:{usb_port_trans}")
     if prog_mode != 2:
         try:
-            rf_serial = serial.Serial(port=usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+            pass
+            #rf_serial = serial.Serial(port=usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
         except serial.SerialException as e:
             if prog_mode != 0:
                 print(f"MAIN: ERROR CONNECTING TO TRANSCIEVER ON PORT \'{usb_port_trans}\', PLEASE TRY AGAIN . . .")

@@ -481,10 +481,12 @@ def update_mission_data(export):
     try:
         # Get all wildfire records after this time that don't yet have mission data
         select_query = """
-            SELECT id FROM wildfires
-            WHERE time_stamp >= ?
-              AND (heading IS NULL OR speed IS NULL OR latitude IS NULL OR longitude IS NULL OR alt IS NULL)
-            ORDER BY time_stamp ASC
+            SELECT id
+            FROM wildfires
+            WHERE time_stamp <= ?
+            AND (heading IS NULL    OR heading = 0
+                OR alt     IS NULL    OR alt     = 0)
+            ORDER BY time_stamp DESC
         """
         cursor.execute(select_query, (mission_time,))
         rows_to_update = cursor.fetchall()
