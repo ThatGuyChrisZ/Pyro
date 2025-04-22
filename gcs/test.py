@@ -48,15 +48,15 @@ def simulate_flight(
 
 if __name__ == "__main__":
     simulate_flight(
-        name="Washoe Fire",
+        name="test3",
         start_lat=39.292778,
         start_lon=-116.845,
         start_alt=392.4857,
         start_high=324.0185,
         start_low=137.6137,
-        session_id="472435352223135",
-        num_points=60,
-        interval=1.0,
+        session_id="472435352223139",
+        num_points=200,
+        interval=0.1,
         radius_m=100,
         temp_variation=3
     )

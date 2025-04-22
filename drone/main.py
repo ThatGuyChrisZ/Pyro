@@ -57,7 +57,8 @@ gps_sim_file = open('sim_gps.txt', 'r')
 UDP_PORT = 5004
 CALL_SIGN = "KK72PA"
 RF_TRANCIEVER_PORT = '/dev/ttyUSB0'
-rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10)
+# RESET THIS FOR DRONE USE!!!
+# rf_serial = serial.Serial(port='/dev/ttyUSB0', baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10)
 
 # ----------------------- #
 # THERMAL CAMERA SETTINGS #
@@ -196,7 +197,7 @@ def create_packet(q3, q4, global_session_id):
             else:
                 pac_id_to_create += 1
 
-        time.sleep(2)
+        #time.sleep(2)
 
 
 
@@ -334,7 +335,7 @@ def send_packet(q4, my_packet_info_dict, prog_mode, q_log):
         else:
             pass
         
-        time.sleep(2)
+        #time.sleep(2)
 
 
 
