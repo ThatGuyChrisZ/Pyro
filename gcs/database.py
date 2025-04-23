@@ -475,20 +475,25 @@ def update_mission_data(export):
     heading = export.get("heading", 0.0)
     speed = export.get("speed", 0.0)
 
+    tenmins_ns = 10 * 60 * 1_000_000_000
+    now_ns = time.time_ns()
+    tenminsago_ns = now_ns - tenmins_ns
+
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
     try:
         # Get all wildfire records after this time that don't yet have mission data
+        # Also received in the last 10 minutes
         select_query = """
             SELECT id
             FROM wildfires
-            WHERE time_stamp <= ?
+            WHERE time_stamp <= ? AND time_stamp >= ?
             AND (heading IS NULL    OR heading = 0
                 OR alt     IS NULL    OR alt     = 0)
             ORDER BY time_stamp DESC
         """
-        cursor.execute(select_query, (mission_time,))
+        cursor.execute(select_query, (now_ns, tenminsago_ns,))
         rows_to_update = cursor.fetchall()
 
         if not rows_to_update:

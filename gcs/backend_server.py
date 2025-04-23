@@ -75,10 +75,30 @@ class WildfireMarkersHandler(BaseHandler):
         filter_type = self.get_argument("filter", "active")
         cursor = self.db.cursor()
 
-        query = """
-            SELECT 
+        # build the optional status filter (applied in the subquery)
+        filter_clause = ""
+        if filter_type == "active":
+            filter_clause = " AND status = 'active'"
+        elif filter_type == "archived":
+            filter_clause = " AND status = 'archived'"
+
+        # subquery finds, for each fire name, the max time_stamp AND the max id (tie-breaker)
+        subquery = f"""
+            SELECT
+                name,
+                MAX(time_stamp) AS max_time_stamp,
+                MAX(id)         AS max_id
+            FROM wildfire_status
+            WHERE 1=1
+              {filter_clause}
+            GROUP BY name
+        """
+
+        # join back on both time_stamp AND id to pick exactly one row per fire
+        query = f"""
+            SELECT
                 ws.id,
-                ws.name, 
+                ws.name,
                 ws.location,
                 ws.size,
                 ws.intensity,
@@ -90,24 +110,14 @@ class WildfireMarkersHandler(BaseHandler):
                 ws.avg_longitude,
                 ws.flights,
                 ws.num_data_points,
-                ws.first_time_stamp, 
+                ws.first_time_stamp,
                 ws.time_stamp,
                 ws.last_flight_id
-            FROM wildfire_status ws
-            JOIN (
-                SELECT name, MAX(time_stamp) AS max_time_stamp
-                FROM wildfire_status
-                WHERE 1=1
-        """
-
-        if filter_type == "active":
-            query += " AND status = 'active'"
-        elif filter_type == "archived":
-            query += " AND status = 'archived'"
-
-        query += """
-                GROUP BY name
-            ) latest ON ws.name = latest.name AND ws.time_stamp = latest.max_time_stamp
+            FROM wildfire_status AS ws
+            JOIN ({subquery}) AS latest
+              ON ws.name       = latest.name
+             AND ws.time_stamp = latest.max_time_stamp
+             AND ws.id         = latest.max_id
             ORDER BY ws.time_stamp DESC
         """
 
@@ -346,54 +356,20 @@ class ThermalDataHandler(BaseHandler):
 
 class FlightDataHandler(BaseHandler):
     def get(self, flight_name=None):
-        """API endpoint to get flight data for a specific fire and flight ID"""
+        """API endpoint to get flight data.
+
+        - /api/flights
+        - /api/flights/{name}
+        - /api/flights/{name}?flight_id={id}
+        """
         try:
             cursor = self.db.cursor()
             flight_id = self.get_argument("flight_id", None)
 
-            if flight_id and flight_name:
-                # Get one specific flight matching both fire name and ID
-                query = """
-                    SELECT 
-                        flight_id,
-                        name, 
-                        ulog_filename,
-                        time_started,
-                        time_ended
-                    FROM flights
-                    WHERE name = ? AND flight_id = ?
-                """
-                cursor.execute(query, [flight_name, int(flight_id)])
-                flight_data = cursor.fetchone()
+            time_from = self.get_argument("time_from", None)
+            time_to   = self.get_argument("time_to",   None)
 
-                if flight_data:
-                    flight = dict(flight_data)
-
-                    # Get associated wildfire data
-                    path_query = """
-                        SELECT 
-                            id,
-                            name,
-                            latitude,
-                            longitude,
-                            alt as altitude,
-                            high_temp,
-                            low_temp,
-                            time_stamp
-                        FROM wildfires
-                        WHERE name = ? AND flight_id = ?
-                        ORDER BY time_stamp
-                    """
-                    cursor.execute(path_query, [flight_name, int(flight_id)])
-                    flight["wildfire_data"] = [dict(row) for row in cursor.fetchall()]
-
-                    self.write(json.dumps(flight))
-                else:
-                    self.set_status(404)
-                    self.write({ "error": "Flight not found" })
-
-            else:
-                # Return all flights (optional filtering with timestamps)
+            if not flight_name:
                 query = """
                     SELECT 
                         flight_id,
@@ -405,24 +381,74 @@ class FlightDataHandler(BaseHandler):
                     WHERE 1=1
                 """
                 params = []
-
-                time_from = self.get_argument('time_from', None)
-                time_to = self.get_argument('time_to', None)
-
                 if time_from:
                     query += " AND time_started >= ?"
                     params.append(float(time_from))
-
                 if time_to:
                     query += " AND time_started <= ?"
                     params.append(float(time_to))
 
                 cursor.execute(query, params)
-                flights = [dict(row) for row in cursor.fetchall()]
-                self.write(json.dumps(flights))
+                all_flights = [dict(row) for row in cursor.fetchall()]
+                self.write(json.dumps(all_flights))
+                return
+
+            if flight_id:
+                cursor.execute("""
+                    SELECT flight_id, name, ulog_filename, time_started, time_ended
+                    FROM flights
+                    WHERE name = ? AND flight_id = ?
+                """, [flight_name, int(flight_id)])
+                row = cursor.fetchone()
+
+                if not row:
+                    self.set_status(404)
+                    return self.write({"error": "Flight not found"})
+
+                flight = dict(row)
+
+                cursor.execute("""
+                    SELECT 
+                        id,
+                        name,
+                        latitude,
+                        longitude,
+                        alt      AS altitude,
+                        high_temp,
+                        low_temp,
+                        time_stamp
+                    FROM wildfires
+                    WHERE name = ? AND flight_id = ?
+                    ORDER BY time_stamp
+                """, [flight_name, int(flight_id)])
+                flight["wildfire_data"] = [dict(r) for r in cursor.fetchall()]
+
+                return self.write(json.dumps(flight))
+
+            query = """
+                SELECT 
+                    flight_id,
+                    name, 
+                    ulog_filename,
+                    time_started,
+                    time_ended
+                FROM flights
+                WHERE name = ?
+            """
+            params = [flight_name]
+            if time_from:
+                query += " AND time_started >= ?"
+                params.append(float(time_from))
+            if time_to:
+                query += " AND time_started <= ?"
+                params.append(float(time_to))
+
+            cursor.execute(query, params)
+            flights = [dict(row) for row in cursor.fetchall()]
+            return self.write(json.dumps(flights))
 
         except Exception as e:
-            logging.error(f"Error fetching flight data: {str(e)}")
+            logging.error(f"Error fetching flight data: {e}")
             self.set_status(500)
             self.write({ "error": "Failed to fetch flight data" })
 

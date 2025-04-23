@@ -1,27 +1,36 @@
 import ThermalOverlay from "./thermal.js";
 
-const fireName     = new URLSearchParams(window.location.search).get("name");
-const flightId     = new URLSearchParams(window.location.search).get("flight_id");
+const params        = new URLSearchParams(window.location.search);
+const fireName      = params.get("name");
+const rawFlightId   = params.get("flight_id");
+
+// treat "null" or empty as no flight selected
+const flightId      = rawFlightId && rawFlightId !== "null" ? rawFlightId : null;
+
 const DATA_INTERVAL = 2000;  
 
 let map, overlay, pathLine;
-let lastTimestamp  = 0;
+let lastTimestamp   = 0;
 let dataTimer;
-let knownFlightId = 0;
+let knownFlightId   = 0;
 
 document.addEventListener("DOMContentLoaded", async () => {
   setTitle();
 
-  // Waiting for new flight
-  if (flightId == "null" || !flightId) {
+  // Waiting for a new flight
+  if (!flightId) {
     await fetchExistingFlights();
     pollForNewFlight();
-    return; 
+    return;
   }
 
   // Live flight mode
   await initializeMap();
-  overlay = new ThermalOverlay(map, { mode: "flight" });
+  overlay = new ThermalOverlay(map, {
+    mode: "flight",
+    recentWindowHours: 12,
+    minHighTemp: 0
+  });
   await loadFlightPath();
   startDataPolling();
 });
@@ -29,12 +38,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function setTitle() {
   const title = document.querySelector("h2");
-  if (title) {
-    if (flightId) {
-      title.textContent = `${fireName} – Flight ${flightId} (LIVE)`;
-    } else {
-      title.textContent = `${fireName} – Awaiting new flight…`;
-    }
+  if (!title) return;
+  if (flightId) {
+    title.textContent = `${fireName} – Flight ${flightId} (LIVE)`;
+  } else {
+    title.textContent = `${fireName} – Awaiting new flight…`;
   }
 }
 
@@ -43,26 +51,25 @@ function flightsURL() {
 }
 
 function thermalURL() {
-  let url = `/api/thermal/${encodeURIComponent(fireName)}`;
-  if (flightId) {
-    url += `?flight_id=${encodeURIComponent(flightId)}`;
-  }
-  return url;
+  const base = `/api/thermal/${encodeURIComponent(fireName)}`;
+  return flightId
+    ? `${base}?flight_id=${encodeURIComponent(flightId)}`
+    : base;
 }
 
 async function fetchExistingFlights() {
-  const res = await fetch(flightsURL());
+  const res     = await fetch(flightsURL(), { cache: "no-store" });
   const flights = await res.json();
-  const ids = flights.map(f => f.flight_id ?? f.id);
+  const ids     = flights.map(f => f.flight_id ?? f.id);
   knownFlightId = ids.length ? Math.max(...ids) : 0;
 }
 
 function pollForNewFlight() {
   setInterval(async () => {
-    const res = await fetch(flightsURL());
+    const res     = await fetch(flightsURL(), { cache: "no-store" });
     const flights = await res.json();
-    const ids = flights.map(f => f.flight_id ?? f.id);
-    const maxId = ids.length ? Math.max(...ids) : 0;
+    const ids     = flights.map(f => f.flight_id ?? f.id);
+    const maxId   = ids.length ? Math.max(...ids) : 0;
 
     if (maxId > knownFlightId) {
       const url = new URL(window.location.href);
@@ -72,26 +79,20 @@ function pollForNewFlight() {
   }, DATA_INTERVAL);
 }
 
+
 function appendPoint(lat, lng, temps, altitude = null, timestamp = null) {
   const [highTemp, lowTemp] = temps;
   const rawTemp = (highTemp + lowTemp) / 2;
 
   overlay.thermalData = overlay.thermalData || [];
-
-  overlay.thermalData.push({
-    lat,
-    lng,
-    rawTemp,
-    altitude,
-    timestamp
-  });
+  overlay.thermalData.push({ lat, lng, rawTemp, altitude, timestamp });
 
   const rawTemps = overlay.thermalData.map(pt => pt.rawTemp);
-  const minTemp = Math.min(...rawTemps);
-  const maxTemp = Math.max(...rawTemps);
+  const minTemp  = Math.min(...rawTemps);
+  const maxTemp  = Math.max(...rawTemps);
 
   overlay.thermalData.forEach(pt => {
-    pt.intensity = (maxTemp > minTemp)
+    pt.intensity = maxTemp > minTemp
       ? (pt.rawTemp - minTemp) / (maxTemp - minTemp)
       : 1;
   });
@@ -100,22 +101,20 @@ function appendPoint(lat, lng, temps, altitude = null, timestamp = null) {
   overlay.avgAltitude = altitudes.reduce((sum, a) => sum + a, 0) / altitudes.length;
 }
 
+
 async function initializeMap() {
-  const center = await fetchFireCenter();
+  const center   = await fetchFireCenter();
   const container = document.getElementById("map");
 
-  if (map != undefined) {
+  // destroy any existing map instance
+  if (map) {
     map.off();
-    map = map.remove();
-    map = null;
+    map.remove();
   }
-
-  //completely destroy map and identifiers left behind by leaflet
-  container.innerHTML = '';
-  container.className = '';
+  container.innerHTML = "";
   delete container._leaflet_id;
 
-  map = L.map("map").setView([center.lat, center.lon], 14);
+  map = L.map(container).setView([center.lat, center.lon], 14);
 
   const osm = L.tileLayer(
     "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -127,16 +126,16 @@ async function initializeMap() {
     { attribution: "Tiles © Esri" }
   );
 
-  document.getElementById("btnMapView").addEventListener("click", () => {
-    map.hasLayer(sat) && map.removeLayer(sat);
-    !map.hasLayer(osm) && map.addLayer(osm);
-    toggleActive("btnMapView","btnSatelliteView");
-  });
-  document.getElementById("btnSatelliteView").addEventListener("click", () => {
-    map.hasLayer(osm) && map.removeLayer(osm);
-    !map.hasLayer(sat) && map.addLayer(sat);
-    toggleActive("btnSatelliteView","btnMapView");
-  });
+  document.getElementById("btnMapView")
+    .addEventListener("click", () => {
+      map.removeLayer(sat); map.addLayer(osm);
+      toggleActive("btnMapView", "btnSatelliteView");
+    });
+  document.getElementById("btnSatelliteView")
+    .addEventListener("click", () => {
+      map.removeLayer(osm); map.addLayer(sat);
+      toggleActive("btnSatelliteView", "btnMapView");
+    });
 
   L.marker([center.lat, center.lon])
     .addTo(map)
@@ -152,9 +151,8 @@ function toggleActive(onId, offId) {
 async function fetchFireCenter() {
   try {
     const res = await fetch("/wildfire_markers?filter=active");
-    if (!res.ok) throw new Error(res.statusText);
     const arr = await res.json();
-    const f = arr.find(x => x.name === fireName);
+    const f   = arr.find(x => x.name === fireName);
     return f
       ? { lat: f.avg_latitude, lon: f.avg_longitude }
       : { lat: 39.3, lon: -119.8 };
@@ -164,13 +162,9 @@ async function fetchFireCenter() {
 }
 
 async function loadFlightPath() {
-  const res = await fetch( thermalURL(), { cache: "no-store" } );
-  if (!res.ok) throw new Error(res.statusText);
+  const res     = await fetch(thermalURL(), { cache: "no-store" });
   const payload = await res.json();
-
-  const points = Array.isArray(payload)
-    ? payload
-    : (payload.wildfire_data || []);
+  const points  = Array.isArray(payload) ? payload : (payload.wildfire_data || []);
 
   const coords = [];
   for (const pt of points) {
@@ -183,7 +177,6 @@ async function loadFlightPath() {
     pathLine = L.polyline(coords, { color: "red" }).addTo(map);
     map.fitBounds(pathLine.getBounds());
   }
-
   overlay.render({ fitBounds: false });
 }
 
@@ -194,12 +187,9 @@ function startDataPolling() {
 }
 
 async function fetchNewPoints() {
-  const res = await fetch( thermalURL(), { cache: "no-store" } );
-  if (!res.ok) throw new Error(res.statusText);
+  const res     = await fetch(thermalURL(), { cache: "no-store" });
   const payload = await res.json();
-  const points = Array.isArray(payload)
-    ? payload
-    : (payload.wildfire_data || []);
+  const points  = Array.isArray(payload) ? payload : (payload.wildfire_data || []);
 
   for (const pt of points) {
     if (pt.time_stamp > lastTimestamp) {
@@ -215,10 +205,7 @@ function drawPoint(pt) {
   } else {
     pathLine.addLatLng([pt.latitude, pt.longitude]);
   }
-
   appendPoint(pt.latitude, pt.longitude, [pt.high_temp, pt.low_temp]);
-  console.log("thermal data: ", overlay.thermalData)
   overlay.render({ fitBounds: false });
-
   map.panTo([pt.latitude, pt.longitude]);
 }

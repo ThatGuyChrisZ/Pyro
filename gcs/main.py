@@ -12,9 +12,11 @@ import signal
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import urllib.parse
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QLabel,
                              QVBoxLayout, QWidget, QSplashScreen, QFileDialog, QLineEdit,
-                             QComboBox, QMessageBox, QGraphicsOpacityEffect, QTabWidget)
+                             QComboBox, QMessageBox, QGraphicsOpacityEffect, QTabWidget,
+                             QSizePolicy, QScrollArea)
 from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtCore import QTimer, Qt, QUrl, QProcess, QPropertyAnimation, pyqtProperty
 from PyQt5.QtWebEngineWidgets import QWebEngineView
@@ -26,12 +28,13 @@ from backend_server import start_server
 radio_proc = None
 server_proc = None
 SPLASH_FADE_IN_TIME, SPLASH_FADE_OUT_TIME, SPLASH_HOLD_TIME = 5000, 0, 2000
+icon_path = os.path.join(os.path.dirname(__file__), "deskapp", "assets", "icons", "fire.png")
 
 def signal_handler(sig, frame):
     global radio_proc
     global server_proc
     if radio_proc is not None and radio_proc.is_alive():
-        print("Terminating radio_proc")
+        print("Terminating background processes")
         radio_proc.terminate()
         radio_proc.join()
         server_proc.terminate()
@@ -46,17 +49,19 @@ class GCSMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("🔥PYRO")
-        self.setGeometry(100, 100, 1920, 1500)
-        self.setWindowIcon(QIcon("deskapp/assets/icons/fire.ico"))
+        self.setGeometry(100, 100, 1000, 800)
         self.prog_mode = None
         self.trans_port = None
         self.call_sign = None
         self.flight_session_name = None
+        self.radio_process = None
+        self.server_process = None
         self.q_transciever_functional = mp.Queue()
 
         # Tab Widget
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
+        self.tabs.currentChanged.connect(self.on_tab_changed)
 
         # Add Main Tab
         self.main_tab = QWidget()
@@ -79,6 +84,13 @@ class GCSMainWindow(QMainWindow):
             args=()
         )
         self.server_process.start()
+
+        print("ICON PATH:", icon_path)
+        print("Exists?", os.path.exists(icon_path))
+        QTimer.singleShot(0, lambda: self.setWindowIcon(QIcon(icon_path)))
+
+        icon = QIcon(icon_path)
+        self.setWindowIcon(icon)
 
     def init_main_tab(self):
         # Layout
@@ -147,50 +159,89 @@ class GCSMainWindow(QMainWindow):
         # Try to load the map immediately
         self.try_load_map()
 
+    def populate_session_dropdown(self):
+        log_dir = "trans_logs"
+        sessions = set()
+
+        if os.path.exists(log_dir):
+            for filename in os.listdir(log_dir):
+                if filename.endswith(".csv"):
+                    session_name = filename.replace(".csv", "")
+                    sessions.add(session_name)
+
+        self.session_dropdown.addItems(sorted(sessions))
+
+    def load_selected_map(self, session_name):
+        if session_name:
+            encoded = urllib.parse.quote(session_name)
+            url = f"http://localhost:8000/current_flight?name={encoded}"
+        else:
+            url = "http://localhost:8000/"
+        self.webview.setUrl(QUrl(url))
+
+
     def try_load_map(self):
-        # Attempt to load the page
-        url = "http://localhost:8000/"
-        
-        # Convert the string URL to a QUrl object
+        name = self.flight_session_name or self.flight_session_name_input.text()
+        if name:
+            encoded = urllib.parse.quote(name)
+            url = f"http://localhost:8000/current_flight?name={encoded}"
+        else:
+            url = "http://localhost:8000/"
         qurl = QUrl(url)
 
-        # Check if the page is loaded successfully
+        try:
+            self.webview.loadFinished.disconnect()
+        except TypeError:
+            pass
+
         def on_load_finished(success):
-            if success:
-                pass
-            else:
-                if self.prog_mode != 0:
-                    print("Failed to load map. Retrying...")
-                self.map_label.setText("Retrying to load map...")
-
-        # Set the callback for when the page has finished loading
+            if not success and self.prog_mode != 0:
+                print(f"[Map] Failed to load {url}")
         self.webview.loadFinished.connect(on_load_finished)
-
-        # Load the map page
         self.webview.setUrl(qurl)
 
+    def show_map_tab(self):
+        name = self.flight_session_name or self.flight_session_name_input.text()
+        encoded = urllib.parse.quote(name) if name else ""
+        url = f"http://localhost:8000/current_flight?name={encoded}" if name else "http://localhost:8000/"
+        self.webview.setUrl(QUrl(url))
+
+
+    def on_tab_changed(self, index):
+        if self.tabs.tabText(index) == "Map":
+            self.show_map_tab()
 
     def init_radio_tab(self):
         layout = QVBoxLayout()
+
+        # Status label (errors, updates)
+        self.radio_status_label = QLabel()
+        layout.addWidget(self.radio_status_label)
 
         # Add a button to trigger graph generation
         self.generate_graph_button = QPushButton("Generate Radio Graphs")
         self.generate_graph_button.clicked.connect(self.display_radio_graphs)
         layout.addWidget(self.generate_graph_button)
 
-        # Label to show the graph image
+        # Scroll area to contain the graph for flexibility
+        scroll_area = QScrollArea()
         self.radio_graph_label = QLabel()
         self.radio_graph_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.radio_graph_label)
+        self.radio_graph_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(self.radio_graph_label)
+        layout.addWidget(scroll_area)
 
         self.radio_tab.setLayout(layout)
-
 
     def start_backend_processes(self):
         self.prog_mode = int(self.prog_mode_dropdown.currentText()[0])
         self.trans_port = self.transciever_port_dropdown.currentText()
         self.call_sign = self.callsign_input.text()
         self.flight_session_name = self.flight_session_name_input.text()
+
+        self.try_load_map()
 
         if len(self.call_sign) != 6:
             QMessageBox.critical(self, "Invalid Callsign", "Callsign must be exactly 6 characters long.")
@@ -228,7 +279,7 @@ class GCSMainWindow(QMainWindow):
                 print("[start_radio] Backend terminated due to transceiver error.")
             return
 
-        # ✅ Success
+        # Success
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
         if self.prog_mode != 0:
@@ -245,11 +296,14 @@ class GCSMainWindow(QMainWindow):
     def refresh_usb_ports(self):
         ports = list_ports.comports()
         self.transciever_port_dropdown.clear()
+        
+        # Filter to include only devices with 'tty' in the name (e.g., ttyUSB0, ttyACM0)
         for port in ports:
-            self.transciever_port_dropdown.addItem(port.device)
+            if 'ttyUSB' in port.device or 'COM' in port.device:
+                self.transciever_port_dropdown.addItem(port.device)
 
     def closeEvent(self, event):
-        if self.radio_process.is_alive():
+        if self.radio_process != None and self.radio_process.is_alive():
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Critical)
             msg.setText("Closing PYRO will terminate data retrieval from the drone. Are you sure you wish to proceed?")
@@ -259,10 +313,18 @@ class GCSMainWindow(QMainWindow):
             if reply == QMessageBox.Yes:
                 self.close_child_processes()
                 event.accept()
+                # print("before kill 1")
+                # os.kill(os.getpid(), signal.SIGINT)  # Triggers signal handler
+                # print("after kill 1")
             else:
                 event.ignore()
         else:
+            self.close_child_processes() #should ignore radio process, since it isn't live
             event.accept()
+            sys.exit(0)
+            # print("before kill 2")
+            # os.kill(os.getpid(), signal.SIGINT)  # Triggers signal handler
+            # print("after kill 2")
 
     def close_radio_child_processes(self):
         self.radio_process.terminate()
@@ -273,34 +335,32 @@ class GCSMainWindow(QMainWindow):
                 print("GCS and backend stopped.")
 
     def close_child_processes(self):
-        self.radio_process.terminate()
-        self.radio_process.join(timeout=5)
+        if self.radio_process != None and self.radio_process.is_alive():
+            self.radio_process.terminate()
+            self.radio_process.join(timeout=5)
         self.server_process.terminate()
         self.server_process.join(timeout=5)
-        if self.radio_process.is_alive():
-            if self.prog_mode != 0:
-                print("FORCE KILLING [start_radio] and [start_server]")
-                print("GCS and backend stopped.")
+        if self.prog_mode != 0:
+            print("FORCE KILLING [start_radio] and [start_server]")
+            print("GCS and backend stopped.")
 
     def display_radio_graphs(self):
         try:
             log_dir = "trans_logs"
-            all_data = []
-            for file in os.listdir(log_dir):
-                if file.endswith(".csv"):
-                    df = pd.read_csv(os.path.join(log_dir, file))
-                    all_data.append(df)
-
-            if not all_data:
+            # Get the newest CSV file based on modification time
+            csv_files = [f for f in os.listdir(log_dir) if f.endswith(".csv")]
+            if not csv_files:
                 self.radio_status_label.setText("No logs found.")
                 return
 
-            df = pd.concat(all_data, ignore_index=True)
+            latest_file = max(csv_files, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)))
+            df = pd.read_csv(os.path.join(log_dir, latest_file))
+
             df["timestamp"] = pd.to_datetime(df["timestamp"], errors='coerce')
             df["packet_id"] = pd.to_numeric(df["packet_id"], errors='coerce')
             df.dropna(subset=["timestamp", "packet_id"], inplace=True)
 
-            fig, axs = plt.subplots(3, 2, figsize=(30, 24))
+            fig, axs = plt.subplots(3, 2, figsize=(18, 12))  # Reasonably big size
             axs = axs.flatten()
 
             # 1. % Corrupted Packets
@@ -312,7 +372,7 @@ class GCSMainWindow(QMainWindow):
             # 2. Retransmissions per pac_type
             retrans_avg = df.groupby("pac_type")["num_transmissions"].mean().reset_index()
             sns.barplot(data=retrans_avg, x="pac_type", y="num_transmissions", ax=axs[1])
-            axs[1].set_title("Average Retransmissions by Packet Type")
+            axs[1].set_title("Average # of Transmissions of Single Packet by Packet Type")
             axs[1].set_ylabel("Avg. Transmissions")
 
             # 3. Missing Packets
@@ -347,15 +407,18 @@ class GCSMainWindow(QMainWindow):
             # Save plot
             graph_path = os.path.join(log_dir, "radio_graph.png")
             plt.tight_layout()
-            plt.savefig(graph_path)
+            plt.savefig(graph_path, dpi=200)
             plt.close()
 
-            # Display in QLabel
+            # Display in QLabel, dynamically resize
             pixmap = QPixmap(graph_path)
-            self.radio_graph_label.setPixmap(pixmap.scaledToWidth(800, Qt.SmoothTransformation))
+            scaled_pixmap = pixmap.scaled(self.radio_graph_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.radio_graph_label.setPixmap(scaled_pixmap)
 
         except Exception as e:
             self.radio_status_label.setText(f"Error generating graph: {e}")
+
+
 
 
 

@@ -442,3 +442,5 @@ def start_radio(prog_mode, usb_port_trans, call_sign, flight_session_name, q_tra
                 p.join()
         if prog_mode != 0:
             print("[start_radio] children killed")
+
+

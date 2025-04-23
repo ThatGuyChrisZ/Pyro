@@ -62,7 +62,8 @@ async function fetchFlights() {
     const subtitle = document.createElement('h6');
     subtitle.className = 'card-subtitle text-muted mb-2';
 
-    const ms = Number(flight.time_started) / 1e6;
+    const secs = Number(flight.time_started);
+    const ms = secs * 1000;
     subtitle.textContent = new Date(ms).toLocaleDateString();  // show date only
   
     const stats = document.createElement('p');
