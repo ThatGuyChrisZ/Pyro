@@ -9,6 +9,8 @@ from firebase_admin import credentials, db
 import time
 from threading import Thread
 
+_packet_counts: dict[str, int] = {}
+
 # Firebase Config
 FIREBASE_CREDENTIALS_PATH = "firebase_credentials.json"
 FIREBASE_DB_URL = "https://pyro-fire-tracking-default-rtdb.firebaseio.com/"
@@ -177,7 +179,11 @@ def process_packet(packet, name, status="active"):
         conn.commit()
         conn.close()
 
-        # update_fire_status(name)
+        _packet_counts[name] = _packet_counts.get(name, 0) + 1
+        if _packet_counts[name] >= 100:
+            update_fire_status(name)
+            _packet_counts[name] = 0
+
         update_flights(flight_id, session_id, name, "ulog_filename")
 
         # Run Firebase sync in a parallel thread
@@ -469,18 +475,25 @@ def update_mission_data(export):
     heading = export.get("heading", 0.0)
     speed = export.get("speed", 0.0)
 
+    tenmins_ns = 10 * 60 * 1_000_000_000
+    now_ns = time.time_ns()
+    tenminsago_ns = now_ns - tenmins_ns
+
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
     try:
         # Get all wildfire records after this time that don't yet have mission data
+        # Also received in the last 10 minutes
         select_query = """
-            SELECT id FROM wildfires
-            WHERE time_stamp >= ?
-              AND (heading IS NULL OR speed IS NULL OR latitude IS NULL OR longitude IS NULL OR alt IS NULL)
-            ORDER BY time_stamp ASC
+            SELECT id
+            FROM wildfires
+            WHERE time_stamp <= ?
+            AND (heading IS NULL    OR heading = 0
+                OR alt     IS NULL    OR alt     = 0)
+            ORDER BY time_stamp DESC
         """
-        cursor.execute(select_query, (mission_time,))
+        cursor.execute(select_query, (now_ns,))
         rows_to_update = cursor.fetchall()
 
         if not rows_to_update:

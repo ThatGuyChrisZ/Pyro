@@ -491,12 +491,14 @@ class TimelineController {
     speedSelect.style.marginLeft = '10px';
     
     const speeds = [
-      { label: '0.5x', value: 0.5 },
-      { label: '1x', value: 1 },
-      { label: '2x', value: 2 },
-      { label: '5x', value: 5 },
-      { label: '10x', value: 10 }
+      { label: '1x',     value: 1     },
+      { label: '2x',     value: 2     },
+      { label: '5x',     value: 5     },
+      { label: '10x',    value: 10    },
+      { label: '100x',   value: 100   },
+      { label: '1000x',  value: 1000  }
     ];
+    
     
     speeds.forEach(speed => {
       const option = document.createElement('option');

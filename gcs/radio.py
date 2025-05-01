@@ -23,6 +23,7 @@ from packet_class._v4.packet import Packet, deserialize_pac
 import time
 import os
 import csv
+import pandas as pd
 import numpy
 from database import process_packet
 # FOR DESKAPP
@@ -58,9 +59,8 @@ os.makedirs(LOG_DIR, exist_ok=True)
 #   Description:                                                       #
 #   Return:                                                            #
 ########################################################################
-def send_packet_to_server(q_unser_packets):
+def send_packet_to_server(flight_session_name, q_unser_packets):
     """Sends the decoded packet to the server."""
-    name = "fire"
     if prog_mode != 0:
         print(f"SP: STARTING PROCESS")
 
@@ -79,7 +79,7 @@ def send_packet_to_server(q_unser_packets):
                     "session_id": packet.session_id
                 }
 
-                process_packet(packet_data, name, "active")
+                process_packet(packet_data, flight_session_name, "active")
             except requests.RequestException as e:
                 print(f"Error connecting to the server: {e}")
         else:
@@ -95,53 +95,80 @@ def send_packet_to_server(q_unser_packets):
 #                transmissions for debugging and performance eval.     #
 #   Return: None                                                       #
 ########################################################################
-def get_flight_log_filename():
-    """Generate a unique filename for each flight log based on timestamp."""
-    timestamp = time.strftime("%Y-%m-%d %H-%M-%S")
-    return os.path.join(LOG_DIR, f"{timestamp}.csv")
+def get_session_filename(session_id):
+    """Generate session-specific file name."""
+    folder = "trans_logs"
+    os.makedirs(folder, exist_ok=True)  # Make sure the folder exists
+    return os.path.join(folder, f"session_{session_id}.csv")
 
 def setup_csv_logger(csv_file):
     """Ensure CSV file has headers."""
-    with open(csv_file, mode="w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(["timestamp", "session_id", "packet_id", "pac_type", "send(s)/receive(r)", "trans_type", "num_transmissions"])  # Define CSV headers
+    if not os.path.exists(csv_file):
+        with open(csv_file, mode="w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["timestamp", "session_id", "packet_id", "pac_type", 
+                             "send(s)/receive(r)", "trans_type", "num_transmissions", "corrupted"])
 
-def radio_log_listener(log_queue, csv_file):
-    """Process that listens for logs and writes them to CSV."""
+def radio_log_listener(q_log):
+    """Process that listens for logs and writes them to CSV."""    
+    while True:
+        try:
+            record = q_log.get()
+            if record is None:
+                break  # Stop listener when None is received
 
-    if prog_mode != 0:
-        print(f"LL: STARTING PROCESS")
+            csv_file = record["csv_file"]
+            setup_csv_logger(csv_file)  # Ensure headers if file doesn't exist
 
-    setup_csv_logger(csv_file)
+            # Open and write within the same block
+            with open(csv_file, mode="a", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow([
+                    record["timestamp"], 
+                    record["session_id"], 
+                    record["packet_id"], 
+                    record["pac_type"], 
+                    record["send(s)/receive(r)"], 
+                    record["trans_type"], 
+                    record["num_transmissions"], 
+                    record["corrupted"]
+                ])
+                file.flush()
+
+        except Exception as e:
+            print("Logging error:", e)
+
+
+def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissions, corrupted, q_log):
+    timestamp = time.strftime("%Y-%m-%d %H-%M-%S")
     
-    with open(csv_file, mode="a", newline="") as file:
-        writer = csv.writer(file)
-        
-        while True:
-            try:
-                record = log_queue.get()
-                if record is None:
-                    break  # Stop listener when None is received
-                
-                writer.writerow([record["timestamp"], record["session_id"], record["packet_id"], record["pac_type"], record["send(s)/receive(r)"], record["trans_type"], record["num_transmissions"]])
-                file.flush()  # Flush immediately to prevent data loss
-            
-            except Exception as e:
-                print("Logging error:", e)
-
-def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissions, q_log):
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-
     # --- #
     # LOG #
     # --- #
-    # Could be fixed for differenting between timestamps for sent ACKs and received DATs
-    trans_type = None
-    if prog_mode != 2:
-        trans_type = 'RF'
-    else:
-        trans_type = 'UDP'
-    q_log.put({"timestamp": timestamp, "session_id": session_id, "packet_id": pac_id, "send(s)/receive(r)": send_or_recieve, "pac_type": pac_type, "trans_type": trans_type,  "num_transmissions": num_transmissions})
+    trans_type = 'RF' if prog_mode != 2 else 'UDP'
+    
+    # Determine file for the session
+    csv_file = get_session_filename(session_id)
+    
+    q_log.put({"csv_file": csv_file,
+               "timestamp": timestamp, 
+               "session_id": session_id, 
+               "packet_id": pac_id, 
+               "send(s)/receive(r)": send_or_recieve, 
+               "pac_type": pac_type, 
+               "trans_type": trans_type, 
+               "num_transmissions": num_transmissions, 
+               "corrupted": corrupted})
+
+def aggregate_logs(session_ids):
+    """Aggregate logs from different session CSVs into a single dataframe."""
+    all_data = []
+    for session_id in session_ids:
+        csv_file = get_session_filename(session_id)
+        if os.path.exists(csv_file):
+            data = pd.read_csv(csv_file)
+            all_data.append(data)
+    return pd.concat(all_data, ignore_index=True)
 
 
 
@@ -156,6 +183,17 @@ def log_trans_gcs(session_id, pac_id, pac_type, send_or_recieve, num_transmissio
 def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q_log, call_sign):
     if prog_mode != 0:
         print(f"RD: STARTING PROCESS")
+
+    if prog_mode != 2:
+        rf_serial = serial.Serial(
+            port=rf_serial_usb_port,
+            baudrate=57600,
+            timeout=10,
+            rtscts=True,
+            dsrdtr=True,
+            write_timeout=10
+        )
+        print(f"RD: Listening on {rf_serial_usb_port}…")
 
     # UDP socket debug mode (local)
     if prog_mode == 2:
@@ -202,6 +240,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
             computed_checksum = zlib.crc32(payload)
 
             if computed_checksum != received_checksum:
+                log_trans_gcs("", "", "", "r", "", True, q_log)
                 print(f"RD: Checksum mismatch! Packet corrupted. \\ COMPUTED:{computed_checksum}, RECEIVED: {received_checksum}")
                 continue
 
@@ -290,7 +329,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
             # Log/Acknowledge Recipient
             if prog_mode != 0:
                 print(f"RD: Packet ID {dat_pac.pac_id} unpacked!")
-            log_trans_gcs(dat_pac.session_id, dat_pac.pac_id, "DAT", "r", data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)], q_log)
+            log_trans_gcs(dat_pac.session_id, dat_pac.pac_id, "DAT", "r", data_pacs_received[(dat_pac.session_id, dat_pac.pac_id)], False, q_log)
 
             # ---------------- #
             # HANDSHAKE METHOD #
@@ -308,7 +347,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
                 print(f"RD: ACK packet length: {len(ack_serialized_data)}")
 
             # Log
-            log_trans_gcs(dat_pac.session_id, dat_pac.pac_id, "ACK", "s", 1, q_log)
+            log_trans_gcs(dat_pac.session_id, dat_pac.pac_id, "ACK", "s", 1, False, q_log)
 
         except struct.error as e:
             print(f"RD: Error decoding packet: {e}")
@@ -324,7 +363,7 @@ def receive_and_decode_packets(prog_mode, rf_serial_usb_port, q_unser_packets, q
 #   Description:                                                       #
 #   Return: None                                                       #
 ########################################################################
-def start_radio(prog_mode, usb_port_trans, call_sign, q_transciever_functional):
+def start_radio(prog_mode, usb_port_trans, call_sign, flight_session_name, q_transciever_functional):
     # mp.set_start_method('fork')    # 'spawn' : for windows deployment (and safe on linux)
                                     #           + safer for I/O bound and thread-sensitive tasks
                                     #           + safer with multithreading and c-extension libaries
@@ -359,11 +398,13 @@ def start_radio(prog_mode, usb_port_trans, call_sign, q_transciever_functional):
         print(f"PROG:{prog_mode}, TRANS:{usb_port_trans}")
     if prog_mode != 2:
         try:
-            rf_serial = serial.Serial(port=usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
+            pass
+            #rf_serial = serial.Serial(port=usb_port_trans, baudrate=57600, timeout=10, rtscts=True, dsrdtr=True, write_timeout=10) #ADJUST PORT, BAUDRATE AS NECESSARY, MUST BE THE SAME SETTINGS AS THE OTHER TRANSCIEVER
         except serial.SerialException as e:
             if prog_mode != 0:
                 print(f"MAIN: ERROR CONNECTING TO TRANSCIEVER ON PORT \'{usb_port_trans}\', PLEASE TRY AGAIN . . .")
             q_transciever_functional.put(False)
+            return
         q_transciever_functional.put(True)
     # if using mode 2 (debug local) -> no need for tranciever and rf connection . . .
     else:
@@ -377,9 +418,9 @@ def start_radio(prog_mode, usb_port_trans, call_sign, q_transciever_functional):
     q_unser_packets = mp.Queue()
     q_log = mp.Queue()
 
-    p_rad_log_listener = mp.Process(target=radio_log_listener, args=(q_log, get_flight_log_filename(),))
+    p_rad_log_listener = mp.Process(target=radio_log_listener, args=(q_log,))
     p_rec_and_dec = mp.Process(target=receive_and_decode_packets, args=(prog_mode, usb_port_trans, q_unser_packets, q_log, call_sign,))
-    p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(q_unser_packets,))
+    p_send_pac_to_serv = mp.Process(target=send_packet_to_server, args=(flight_session_name, q_unser_packets,))
 
     processes.extend([p_rad_log_listener, p_rec_and_dec, p_send_pac_to_serv])
     try:
@@ -401,3 +442,5 @@ def start_radio(prog_mode, usb_port_trans, call_sign, q_transciever_functional):
                 p.join()
         if prog_mode != 0:
             print("[start_radio] children killed")
+
+

@@ -94,7 +94,11 @@ async function initializeMap() {
 }
 
 async function initializeOverlay() {
-  overlay = new ThermalOverlay(map, { mode: "fire" });
+  overlay = new ThermalOverlay(map, {
+    mode: "fire",
+    recentWindowHours: 12,
+    minHighTemp: 100
+  });
   await overlay.loadThermalData(fireName);
   overlay.render({ fitBounds: true });
 }

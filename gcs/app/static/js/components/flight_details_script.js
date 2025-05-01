@@ -77,7 +77,11 @@ async function fetchFireCenter() {
 }
 
 async function initializeOverlay() {
-  overlay = new ThermalOverlay(map, { mode: "flight" });
+  overlay = new ThermalOverlay(map, {
+    mode: "flight",
+    recentWindowHours: 12,
+    minHighTemp: 0
+  });
   await overlay.loadThermalData(fireName, null, flightId);
   overlay.render({ fitBounds: true });
 }
