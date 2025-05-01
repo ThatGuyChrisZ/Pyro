@@ -93,7 +93,7 @@ def simulate_flight(
 
 if __name__ == "__main__":
     simulate_flight(
-        name="Test Fire",
+        name="Davis Fire",
         center_lat=39.292778,
         center_lon=-116.845000,
         start_alt=392.5,

@@ -847,7 +847,7 @@ def start_server():
     init_db()
 
     # Optionally import test packets
-    import_packets_from_file('all_fire_packets.txt')
+    import_packets_from_file('_packets.txt')
     
     # Parse command line arguments
     parse_command_line()

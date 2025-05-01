@@ -214,26 +214,141 @@ class GCSMainWindow(QMainWindow):
     def init_radio_tab(self):
         layout = QVBoxLayout()
 
-        # Status label (errors, updates)
         self.radio_status_label = QLabel()
         layout.addWidget(self.radio_status_label)
 
-        # Add a button to trigger graph generation
         self.generate_graph_button = QPushButton("Generate Radio Graphs")
         self.generate_graph_button.clicked.connect(self.display_radio_graphs)
         layout.addWidget(self.generate_graph_button)
 
-        # Scroll area to contain the graph for flexibility
+        # Stats area (key metrics as labels)
+        self.radio_stats_label = QLabel()
+        self.radio_stats_label.setAlignment(Qt.AlignLeft)
+        self.radio_stats_label.setWordWrap(True)
+        layout.addWidget(self.radio_stats_label)
+
+        # Scrollable area for graph
         scroll_area = QScrollArea()
         self.radio_graph_label = QLabel()
         self.radio_graph_label.setAlignment(Qt.AlignCenter)
         self.radio_graph_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(self.radio_graph_label)
         layout.addWidget(scroll_area)
 
         self.radio_tab.setLayout(layout)
+
+
+
+    def display_radio_graphs(self):
+        try:
+            sns.set_theme(style="whitegrid")
+            log_dir = "trans_logs"
+            csv_files = [f for f in os.listdir(log_dir) if f.endswith(".csv")]
+            if not csv_files:
+                self.radio_status_label.setText("No logs found.")
+                return
+
+            latest_file = max(csv_files, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)))
+            df = pd.read_csv(os.path.join(log_dir, latest_file))
+
+            df["timestamp"] = pd.to_datetime(df["timestamp"], errors='coerce')
+            df["packet_id"] = pd.to_numeric(df["packet_id"], errors='coerce')
+            df.dropna(subset=["timestamp", "packet_id"], inplace=True)
+
+            recv_df = df[df["send(s)/receive(r)"] == "r"]
+
+            # ==== KEY METRICS ====
+            total_packets = len(df)
+            total_received = len(recv_df)
+            corruption_rate = df["corrupted"].mean() * 100
+            avg_transmissions = df["num_transmissions"].mean()
+
+            metrics_text = f"""
+            <b>Latest Session Metrics:</b><br>
+            Total Packets Logged: {total_packets}<br>
+            Total Received: {total_received}<br>
+            Avg. Transmissions per Packet: {avg_transmissions:.2f}<br>
+            Overall Corruption Rate: <span style='color:red'>{corruption_rate:.2f}%</span><br>
+            """
+            self.radio_stats_label.setText(metrics_text)
+
+            # ==== MISSING PACKET CALC ====
+            missing_summary = []
+            for session_id in df["session_id"].unique():
+                sent_ids = set(df[(df["session_id"] == session_id) & (df["send(s)/receive(r)"] == "s")]["packet_id"])
+                recv_ids = set(df[(df["session_id"] == session_id) & (df["send(s)/receive(r)"] == "r")]["packet_id"])
+                missing = sent_ids - recv_ids
+                if missing:
+                    missing_summary.append((session_id, len(missing)))
+
+            total_missing = sum(m[1] for m in missing_summary)
+            missing_lines = "".join(
+                f"Session {sid}: {count} missing<br>" for sid, count in missing_summary
+            )
+
+            metrics_text = f"""
+            <b>Latest Session Metrics:</b><br>
+            Total Packets Logged: {total_packets}<br>
+            Total Received: {total_received}<br>
+            Avg. Transmissions per Packet: {avg_transmissions:.2f}<br>
+            Overall Corruption Rate: <span style='color:red'>{corruption_rate:.2f}%</span><br>
+            Dropped Packets Not Received: <span style='color:orange'>{total_missing}</span><br>
+            {missing_lines}
+            """
+            self.radio_stats_label.setText(metrics_text)
+
+            # ==== GRAPH PLOTTING ====
+            fig, axs = plt.subplots(2, 2, figsize=(16, 10))
+            axs = axs.flatten()
+
+            # 1. Retransmissions by Packet Type
+            retrans_avg = df.groupby("pac_type")["num_transmissions"].mean().reset_index()
+            sns.barplot(data=retrans_avg, x="pac_type", y="num_transmissions", ax=axs[0], palette="rocket")
+            axs[0].set_title("Avg. Transmissions per Packet Type")
+
+            # 2. Missing Packets per Session
+            for session_id in recv_df["session_id"].unique():
+                s_df = recv_df[recv_df["session_id"] == session_id]
+                expected_ids = range(int(s_df["packet_id"].min()), int(s_df["packet_id"].max()) + 1)
+                received_ids = s_df["packet_id"].unique()
+                missing = sorted(set(expected_ids) - set(received_ids))
+                axs[1].plot(received_ids, [session_id] * len(received_ids), label=f"Session {session_id}")
+                axs[1].scatter(missing, [session_id] * len(missing), c="red", marker="x", s=50, label=f"Missing {session_id}")
+            axs[1].set_title("Missing Packet IDs by Session")
+            axs[1].legend()
+
+            # 3. Out-of-Order Detection
+            recv_sorted = recv_df.sort_values("timestamp")
+            recv_sorted["expected"] = recv_sorted["packet_id"].cummin()
+            recv_sorted["out_of_order"] = recv_sorted["packet_id"] < recv_sorted["expected"]
+            sns.scatterplot(data=recv_sorted, x="timestamp", y="packet_id", hue="out_of_order", ax=axs[2], palette="dark")
+            axs[2].set_title("Out-of-Order Packets")
+
+            # 4. Packet Arrival Trend
+            recv_df["minute"] = recv_df["timestamp"].dt.floor("min")
+            trend = recv_df.groupby("minute")["packet_id"].count().reset_index()
+            sns.lineplot(data=trend, x="minute", y="packet_id", ax=axs[3], color="green")
+            axs[3].set_title("Packet Arrival Over Time")
+            axs[3].set_ylabel("# Packets")
+
+            for ax in axs:
+                ax.tick_params(axis='x', rotation=15)
+                ax.grid(True, linestyle='--', alpha=0.6)
+
+            plt.tight_layout()
+            graph_path = os.path.join(log_dir, "radio_graph.png")
+            plt.savefig(graph_path, dpi=200)
+            plt.close()
+
+            pixmap = QPixmap(graph_path)
+            scaled_pixmap = pixmap.scaled(self.radio_graph_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.radio_graph_label.setPixmap(scaled_pixmap)
+
+        except Exception as e:
+            self.radio_status_label.setText(f"Error generating graph: {e}")
+
+
 
     def start_backend_processes(self):
         self.prog_mode = int(self.prog_mode_dropdown.currentText()[0])
@@ -343,85 +458,6 @@ class GCSMainWindow(QMainWindow):
         if self.prog_mode != 0:
             print("FORCE KILLING [start_radio] and [start_server]")
             print("GCS and backend stopped.")
-
-    def display_radio_graphs(self):
-        try:
-            log_dir = "trans_logs"
-            # Get the newest CSV file based on modification time
-            csv_files = [f for f in os.listdir(log_dir) if f.endswith(".csv")]
-            if not csv_files:
-                self.radio_status_label.setText("No logs found.")
-                return
-
-            latest_file = max(csv_files, key=lambda f: os.path.getmtime(os.path.join(log_dir, f)))
-            df = pd.read_csv(os.path.join(log_dir, latest_file))
-
-            df["timestamp"] = pd.to_datetime(df["timestamp"], errors='coerce')
-            df["packet_id"] = pd.to_numeric(df["packet_id"], errors='coerce')
-            df.dropna(subset=["timestamp", "packet_id"], inplace=True)
-
-            fig, axs = plt.subplots(3, 2, figsize=(18, 12))  # Reasonably big size
-            axs = axs.flatten()
-
-            # 1. % Corrupted Packets
-            corruption_rate = df.groupby("pac_type")["corrupted"].mean().reset_index()
-            sns.barplot(data=corruption_rate, x="pac_type", y="corrupted", ax=axs[0])
-            axs[0].set_title("Percentage of Corrupted Packets")
-            axs[0].set_ylabel("Corruption Rate")
-
-            # 2. Retransmissions per pac_type
-            retrans_avg = df.groupby("pac_type")["num_transmissions"].mean().reset_index()
-            sns.barplot(data=retrans_avg, x="pac_type", y="num_transmissions", ax=axs[1])
-            axs[1].set_title("Average # of Transmissions of Single Packet by Packet Type")
-            axs[1].set_ylabel("Avg. Transmissions")
-
-            # 3. Missing Packets
-            recv_df = df[df["send(s)/receive(r)"] == "r"]
-            for session_id in recv_df["session_id"].unique():
-                s_df = recv_df[recv_df["session_id"] == session_id]
-                expected_ids = range(int(s_df["packet_id"].min()), int(s_df["packet_id"].max()) + 1)
-                received_ids = s_df["packet_id"].unique()
-                missing = sorted(set(expected_ids) - set(received_ids))
-                axs[2].plot(received_ids, label=f"Session {session_id}")
-                axs[2].scatter(missing, [-1]*len(missing), c="red", marker="x", label=f"Missing {session_id}")
-            axs[2].set_title("Received vs Missing Packet IDs")
-            axs[2].set_xlabel("Packet ID")
-            axs[2].legend(loc='upper right')
-
-            # 4. Out-of-order Packets
-            recv_sorted = recv_df.sort_values("timestamp")
-            recv_sorted["expected"] = recv_sorted["packet_id"].cummin()
-            recv_sorted["out_of_order"] = recv_sorted["packet_id"] < recv_sorted["expected"]
-            sns.scatterplot(data=recv_sorted, x="timestamp", y="packet_id", hue="out_of_order", ax=axs[3])
-            axs[3].set_title("Out-of-Order Packet Detection")
-            axs[3].legend(title="Out of Order")
-
-            # 5. Retransmission Histogram
-            sns.histplot(data=recv_df, x="num_transmissions", bins=range(1, recv_df["num_transmissions"].max()+2), ax=axs[4])
-            axs[4].set_title("Histogram of Retransmissions")
-            axs[4].set_xlabel("# Transmissions")
-
-            # Hide unused subplot (bottom-right)
-            axs[5].axis("off")
-
-            # Save plot
-            graph_path = os.path.join(log_dir, "radio_graph.png")
-            plt.tight_layout()
-            plt.savefig(graph_path, dpi=200)
-            plt.close()
-
-            # Display in QLabel, dynamically resize
-            pixmap = QPixmap(graph_path)
-            scaled_pixmap = pixmap.scaled(self.radio_graph_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.radio_graph_label.setPixmap(scaled_pixmap)
-
-        except Exception as e:
-            self.radio_status_label.setText(f"Error generating graph: {e}")
-
-
-
-
-
 
 #
 #   THIS CLASS (FadingSplashScreen) WAS CREATED USING AN LLM (why would I program this myself??)

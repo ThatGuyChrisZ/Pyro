@@ -488,12 +488,12 @@ def update_mission_data(export):
         select_query = """
             SELECT id
             FROM wildfires
-            WHERE time_stamp <= ? AND time_stamp >= ?
+            WHERE time_stamp <= ?
             AND (heading IS NULL    OR heading = 0
                 OR alt     IS NULL    OR alt     = 0)
             ORDER BY time_stamp DESC
         """
-        cursor.execute(select_query, (now_ns, tenminsago_ns,))
+        cursor.execute(select_query, (now_ns,))
         rows_to_update = cursor.fetchall()
 
         if not rows_to_update:
