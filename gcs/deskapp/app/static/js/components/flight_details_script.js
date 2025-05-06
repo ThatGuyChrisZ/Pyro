@@ -76,6 +76,7 @@ async function fetchFireCenter() {
   }
 }
 
+// loads and renders thermalOverlay object
 async function initializeOverlay() {
   overlay = new ThermalOverlay(map, {
     mode: "flight",
@@ -86,6 +87,7 @@ async function initializeOverlay() {
   overlay.render({ fitBounds: true });
 }
 
+// loads FlightTimelineController and renders thermalOverlay whenever controller is changed
 async function initializeTimeline() {
   const container = document.getElementById("timeline-container");
   if (!container) return;

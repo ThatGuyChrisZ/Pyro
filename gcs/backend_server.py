@@ -55,7 +55,6 @@ class AboutHandler(BaseHandler):
         self.render("about.html")
 
 # API Endpoint Handlers
-
 class HeatmapDataHandler(BaseHandler):
     def get(self):
         name = self.get_argument("name", None)
@@ -307,6 +306,12 @@ class FireDataHandler(BaseHandler):
 
 class ThermalDataHandler(BaseHandler):
     def get(self, name):
+        """API endpoint to get thermal data.
+
+        - /api/thermal
+        - /api/thermal/{name}
+        - /api/thermal/{name}?flight_id={id}
+        """
         try:
             cursor = self.db.cursor()
 
@@ -776,7 +781,7 @@ def make_app():
         (r"/api/flights/(.*)", FlightDataHandler),
         (r"/api/fire_status", WildfireStatusHandler),
         
-        # WebSocket route for live data
+        # WebSocket route for live data (not currently in use)
         (r"/ws/live", LiveDataWebSocketHandler),
         (r"/api/live_flight/(\d+)", LiveFlightHandler),
         
@@ -843,7 +848,7 @@ def start_app():
 
 
 def start_server():
-    # Initialize databases
+    # Initialize database
     init_db()
 
     # Optionally import test packets
@@ -852,9 +857,10 @@ def start_server():
     # Parse command line arguments
     parse_command_line()
     
-    # Start the avionics integration process
+    # Start the avionics integration process and main server process
     q1 = mp.Queue()
     p1 = mp.Process(target=avionics_integration, args=(q1,))
+
     p_server = mp.Process(target=start_app)
     p1.start()
     p_server.start()

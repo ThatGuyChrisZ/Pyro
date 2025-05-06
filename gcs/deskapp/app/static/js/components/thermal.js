@@ -1,3 +1,5 @@
+// returns a wrapped version of function that can only execute once per wait interval
+// used to slow down thermalOverlay updates
 function throttle(fn, wait) {
   let last = 0;
   let timeout = null;
@@ -20,6 +22,7 @@ function throttle(fn, wait) {
 }
 
 export default class ThermalOverlay {
+  // initializes map instance based on mode (flight or fire)
   constructor(mapInstance, {
     mode              = "fire",
     recentWindowHours = 24,
@@ -53,12 +56,14 @@ export default class ThermalOverlay {
     this.flightCutoff    = 0.0;
     this.flightMinOpacity= 0.5;
 
+    // render only occurs every 200ms
     this.render = throttle(this._render.bind(this), 200);
     this.map.on("zoomend", () => {
       if (this.heatLayer) this.render();
     });
   }
 
+  // retrieves all thermal points for a fire (and optional flight) from thermal API endpoint
   async _fetchAll(name, flight_id = null) {
     let url = `/api/thermal/${encodeURIComponent(name)}`;
     if (flight_id) url += `?flight_id=${encodeURIComponent(flight_id)}`;
@@ -68,6 +73,7 @@ export default class ThermalOverlay {
       .filter(pt => pt.high_temp >= this.minHighTemp);
   }
 
+  // ensures raw data is fetched once, then processes it in a Web Worker
   async loadThermalData(name, time_stamp = null, flight_id = null) {
     if (!this.rawCache) {
       await this._fetchAll(name, flight_id);
@@ -75,6 +81,7 @@ export default class ThermalOverlay {
     return this._processInWorker(time_stamp);
   }
 
+  // filter, deduplicate, and compute intensity for each point in worker
   _processInWorker(time_stamp) {
     return new Promise((resolve, reject) => {
       const workerCode = `
@@ -148,6 +155,7 @@ export default class ThermalOverlay {
     });
   }
 
+  // removes existing heatLayer and draws a new heatmap layer
   _render(options = {}) {
     if (this.heatLayer) this.map.removeLayer(this.heatLayer);
     const isFlight = this.mode === 'flight';
@@ -164,6 +172,7 @@ export default class ThermalOverlay {
     return this.heatLayer;
   }
 
+  // calculates heatmap point radius based on average altitude and current zoom
   _calcRadius() {
     if (!this.avgAltitude) return 25;
     const zoom = this.map.getZoom();
@@ -175,6 +184,7 @@ export default class ThermalOverlay {
     return Math.max(1, Math.min(px, 50));
   }
 
+  // Fire Mode
   _fireOpts(radius) {
     return {
       radius,
@@ -187,6 +197,7 @@ export default class ThermalOverlay {
     };
   }
 
+  // Flight Mode
   _flightOpts(radius) {
     return {
       radius,

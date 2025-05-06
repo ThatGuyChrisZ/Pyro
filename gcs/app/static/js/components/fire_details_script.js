@@ -26,6 +26,7 @@ function setFireTitle() {
   }
 }
 
+// Default date and time is now
 function setDefaultDateTime() {
   const now = new Date();
   const dateInput = document.getElementById("date-select");
@@ -93,6 +94,7 @@ async function initializeMap() {
   });
 }
 
+// loads and renders thermalOverlay object
 async function initializeOverlay() {
   overlay = new ThermalOverlay(map, {
     mode: "fire",
@@ -103,6 +105,7 @@ async function initializeOverlay() {
   overlay.render({ fitBounds: true });
 }
 
+// loads timelineController and renders thermalOverlay whenever controller is changed
 async function initializeTimeline() {
   const container = document.getElementById("timeline-container");
   if (!container) {
@@ -132,6 +135,7 @@ async function initializeCharts() {
   renderAllCharts("all");
 }
 
+// Render line charts (size, intensity, # flights) based on users selected scope
 function renderAllCharts(scope) {
   const now = new Date();
   let start, end = now;
@@ -218,6 +222,7 @@ function renderLineChart(containerSelector, data, valueKey, yLabel, xDomain) {
     .attr("d", line);
 }
 
+// wires up date/time inputs and timeline‐scope buttons to their respective handlers so user interactions trigger overlay and chart updates
 function bindUIEvents() {
   document.getElementById("date-select")?.addEventListener("change", updateHeatmapFromInputs);
   document.getElementById("time-select")?.addEventListener("change", updateHeatmapFromInputs);
@@ -275,6 +280,7 @@ function selectGradient(event) {
   overlay.render();
 }
 
+// Search map for location (not currently used)
 async function searchMap() {
   const input = document.getElementById("search-location");
   const location = input?.value;

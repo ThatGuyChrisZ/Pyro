@@ -35,7 +35,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   startDataPolling();
 });
 
-
+// Set title based on user given fire name
 function setTitle() {
   const title = document.querySelector("h2");
   if (!title) return;
@@ -57,6 +57,7 @@ function thermalURL() {
     : base;
 }
 
+// Find most recent flight ID
 async function fetchExistingFlights() {
   const res     = await fetch(flightsURL(), { cache: "no-store" });
   const flights = await res.json();
@@ -64,6 +65,7 @@ async function fetchExistingFlights() {
   knownFlightId = ids.length ? Math.max(...ids) : 0;
 }
 
+// Queries for a new flight every 2s
 function pollForNewFlight() {
   setInterval(async () => {
     const res     = await fetch(flightsURL(), { cache: "no-store" });
@@ -79,7 +81,7 @@ function pollForNewFlight() {
   }, DATA_INTERVAL);
 }
 
-
+// Add new datapoint to the thermalOverlay object
 function appendPoint(lat, lng, temps, altitude = null, timestamp = null) {
   const [highTemp, lowTemp] = temps;
   const rawTemp = (highTemp + lowTemp) / 2;
@@ -148,6 +150,7 @@ function toggleActive(onId, offId) {
   document.getElementById(offId).classList.remove("active");
 }
 
+// Returns fire center from wildfire_markers API endpoint
 async function fetchFireCenter() {
   try {
     const res = await fetch("/wildfire_markers?filter=active");
@@ -161,6 +164,7 @@ async function fetchFireCenter() {
   }
 }
 
+// queries thermal API endpoint for new data and stores GPS data as a flight path and thermal data in overlay
 async function loadFlightPath() {
   const res     = await fetch(thermalURL(), { cache: "no-store" });
   const payload = await res.json();
@@ -199,6 +203,7 @@ async function fetchNewPoints() {
   }
 }
 
+// Draw flight path and call thermalOverlay render
 function drawPoint(pt) {
   if (!pathLine) {
     pathLine = L.polyline([[pt.latitude, pt.longitude]], { color: "red" }).addTo(map);

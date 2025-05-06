@@ -1,4 +1,5 @@
 // Moved from Database
+// Returns closest city (or county, state, etc. ) based on coords
 async function getNearestCity(lat, lon) {
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`;
@@ -13,6 +14,7 @@ async function getNearestCity(lat, lon) {
   }
 }
 
+// Manages the wildfire markers map and fire info panel on the main 'Fires' page
 class FiresPage {
   constructor() {
     this.map = null;
@@ -34,6 +36,7 @@ class FiresPage {
     }).addTo(this.map);
   }
 
+  // fetches wildfire marker data from API endpoint and renders them on the map
   async loadWildfireMarkers(filter = 'active') {
     try {
       const response = await fetch(`/wildfire_markers?filter=${filter}`);
@@ -67,6 +70,7 @@ class FiresPage {
     }
   }
 
+  // fetches size/intensity comparison data for a fire from API endpoint
   async loadComparisonData(name) {
     try {
       const response = await fetch(`/fire_comparison?name=${encodeURIComponent(name)}`);
@@ -79,6 +83,7 @@ class FiresPage {
     }
   }
 
+  // updates the side panel with details for the selected fire
   async updateFireInfoPanel(fire) {
     const panel = document.getElementById('fireInfoPanel');
   
@@ -116,6 +121,7 @@ class FiresPage {
       else return "red";
     }
   
+    // build size and intensity bars comparing current vs. previous values
     let sizeBar = '';
     if (fire.prev_size != null && fire.prev_size > 0) {
       const maxSize = Math.max(fire.size, fire.prev_size);

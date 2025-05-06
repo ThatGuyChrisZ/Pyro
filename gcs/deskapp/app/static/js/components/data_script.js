@@ -1,3 +1,5 @@
+// Defaults to display wildfires_status table filtered such that only the most recent record for each fire name is displayed
+
 async function fetchData(endpoint) {
     try {
       const response = await fetch(endpoint);

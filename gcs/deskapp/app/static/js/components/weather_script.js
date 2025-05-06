@@ -1,3 +1,4 @@
+// retrieves current weather for given coordinates from OpenWeatherMap API
 async function fetchWeather(lat, lon) {
     try {
         const apiKey = "a994d97b2a4037992168cf9bd8b9debf"; // OpenWeatherMap API key

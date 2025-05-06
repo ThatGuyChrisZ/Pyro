@@ -36,7 +36,8 @@ class TimelineController {
     
     this.init();
   }
-  
+
+  // Initializes SVG canvas, control UI, event bindings, and interaction layers
   init() {
     this.createControlUI();
     this.bindScopeButtons();
@@ -97,6 +98,7 @@ class TimelineController {
     this.container.appendChild(controlsRow);
   }
   
+  // Fetches flight timestamps, thermal data, sets start/end/current times, and prepares intensity readings.
   async loadData(name) {
     try {
       const thermalResponse = await fetch(`/api/thermal/${name}`);
@@ -154,6 +156,7 @@ class TimelineController {
     }
   }
   
+  // Update start/end times based on the selected scope and re-render the timeline
   updateTimelineScope() {
     const scopeDuration = this.scopeOptions[this.currentScope];
     
@@ -178,6 +181,7 @@ class TimelineController {
     this.updateDateDisplay();
   }
   
+  // Draws the time axis line, thermal intensity curve, and current-time marker and optional brush
   render() {
     if (!this.startTime || !this.endTime) return;
     
@@ -272,6 +276,7 @@ class TimelineController {
     if (this.brushEnabled) this.drawBrush();
   }
   
+  // Draws movable current time marker and updates display
   drawCurrentTimeMarker() {
     this.currentTimeGroup.selectAll('*').remove();
     
@@ -373,6 +378,7 @@ class TimelineController {
     }
   }
 
+  // Draws a brush selection tool over the timeline for custom scope zooming
   drawBrush() {
     const brush = d3.brushX()
       .extent([[0,0],[this.width,this.options.height]])
@@ -405,6 +411,7 @@ class TimelineController {
       .call(brush);
   }
   
+  // sets the currentTime to the given timestamp and emits a time change event
   setCurrentTime(timestamp) {
     this.currentTime = new Date(timestamp);
     this.drawCurrentTimeMarker();
@@ -419,6 +426,8 @@ class TimelineController {
     this.scrub(event);
   }
   
+  // while the user is dragging, read the mouse’s X coordinate and convert it back into a currentTime
+  // redraws the current‐time marker and notifies any listener of the new timestamp
   scrub(event) {
     if (!this.isScrubbing || !this.timeScale) return;
   
@@ -436,6 +445,7 @@ class TimelineController {
     this.isScrubbing = false;
   }
   
+  // Adds play, pause, zoom, export, and speed controls for animation and data export
   addPlayControls() {
     const controlsDiv = document.createElement('div');
     controlsDiv.className = 'timeline-controls';
@@ -609,6 +619,7 @@ class TimelineController {
     };
   }
 
+  // Attaches click handlers to scope selector buttons to change timeline scope
   bindScopeButtons() {
     const buttons = document.querySelectorAll('.timeline-scope-selector .btn-group button');
     buttons.forEach(btn => {
@@ -623,7 +634,7 @@ class TimelineController {
     });
   }
   
-  
+  // Updates dimensions and re-renders chart on container resize
   resize() {
     this.width = this.container.clientWidth - (this.options.padding * 2);
     this.svg.attr('width', '100%');

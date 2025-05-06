@@ -23,9 +23,11 @@ class FlightTimelineController {
       this._init();
     }
   
+    // Initializes FlightTimelineController
     _init() {
       this._createDateUI();
 
+      // Create SVG and groups for axis, lines, marker
       this.svg = d3.select(this.container)
         .append('svg')
         .attr('width', '100%')
@@ -38,6 +40,7 @@ class FlightTimelineController {
       this.linesGroup       = this.baseGroup.append('g').attr('class','timeline-lines');
       this.currentTimeGroup = this.baseGroup.append('g').attr('class','timeline-current-time');
   
+      // Add transparent rect for scrubbing if allowed
       if (this.options.allowScrubbing) {
         this.baseGroup.append('rect')
           .attr('class','timeline-overlay')
@@ -90,6 +93,7 @@ class FlightTimelineController {
       this.container.appendChild(ctrls);
     }
   
+    // Fetches flight timestamps, thermal data, sets start/end/current times, and prepares intensity readings.
     async loadData(fireName, flightId) {
       // fetch flight path for start/end
       const resp1 = await fetch(
@@ -110,7 +114,7 @@ class FlightTimelineController {
         console.warn('No flight-path timestamps returned for', flightId);
       }
   
-      // fetch thermal data
+      // fetch thermal data and normalize intensities
       const resp2 = await fetch(
         `/api/thermal/${encodeURIComponent(fireName)}?flight_id=${flightId}`
       );
@@ -137,6 +141,7 @@ class FlightTimelineController {
       };
     }
   
+    // Draws the time axis line, thermal intensity curve, and current-time marker.
     _render() {
       if (!this.startTime || !this.endTime) return;
   
@@ -190,6 +195,7 @@ class FlightTimelineController {
       this._drawCurrentMarker();
     }
   
+    // Draws movable current time marker and updates display
     _drawCurrentMarker() {
       this.currentTimeGroup.selectAll('*').remove();
   
@@ -229,6 +235,7 @@ class FlightTimelineController {
       });
     }
   
+    // Starts playback loop advancing currentTime and updates the marker until paused or end is reached.
     _play() {
       if (this.isPlaying) return;
       if (this.currentTime >= this.endTime) this.currentTime = new Date(this.startTime);
@@ -258,6 +265,9 @@ class FlightTimelineController {
     _startScrub(e) {
       this.isScrubbing = true; this._scrub(e);
     }
+
+    // while the user is dragging, read the mouse’s X coordinate and convert it back into a currentTime
+    // redraws the current‐time marker and notifies any listener of the new timestamp
     _scrub(e) {
       if (!this.isScrubbing || !this.timeScale) return;
       const rect = this.container.getBoundingClientRect();
@@ -267,10 +277,12 @@ class FlightTimelineController {
       this._drawCurrentMarker();
       this._emitTimeChange();
     }
+
     _stopScrub() {
       this.isScrubbing = false;
     }
   
+    // Use Left and right keys to update currentTime marker
     _onKey(evt) {
       if (!this.timeScale || !this.currentTime) return;
       const step = (this.endTime - this.startTime) / 100;

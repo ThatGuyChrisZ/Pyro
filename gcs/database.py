@@ -131,6 +131,7 @@ def sync_to_firebase():
     conn.close()
 
 def process_packet(packet, name, status="active"):
+    """Process new packet and add to database if it doesn't exist already."""
     try:
         ns24h = 24 * 60 * 60 * 1_000_000_000 
         pac_id = packet.get("pac_id", -1)
@@ -179,6 +180,7 @@ def process_packet(packet, name, status="active"):
         conn.commit()
         conn.close()
 
+        # Update fire status every 100 packets
         _packet_counts[name] = _packet_counts.get(name, 0) + 1
         if _packet_counts[name] >= 100:
             update_fire_status(name)
@@ -195,6 +197,7 @@ def process_packet(packet, name, status="active"):
 
 
 def fetch_fire_list(status: str = "active") -> List[dict]:
+    """Returns list of all active fires."""
     try:
         conn = sqlite3.connect('wildfire_data.db')
         cursor = conn.cursor()
@@ -292,6 +295,7 @@ def fetch_all_heatmap_data() -> List[dict]:
 MIN_TEMP_THRESHOLD = 200
 
 def init_wildfire_status_db():
+    """Initialize Wildfire Status Table."""
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
     cursor.execute(
@@ -319,12 +323,10 @@ def init_wildfire_status_db():
     conn.commit()
     conn.close()
 
-import sqlite3
-import time
-import math
-
 # Each record represents a data aggregate update from the past 24 hours
 def update_fire_status(name: str):
+    """Update Wildfire Status Table with all data from past 24 hours for given fire."""
+
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
@@ -342,6 +344,7 @@ def update_fire_status(name: str):
     ns24h = 24 * 60 * 60 * 1_000_000_000
     window_start = window_end - ns24h
 
+    # Find all data in last 24 hours by fire name
     cursor.execute(
         """
         SELECT latitude, longitude, high_temp, low_temp, alt, flight_id, time_stamp 
@@ -414,6 +417,7 @@ def update_fire_status(name: str):
     print(f"✓ Fire status for '{name}' updated using data from {window_start} to {window_end}.")
 
 def process_new_flight(name: str, session_id: str):
+    """Creates new record in the Flights table if new data is the first with given session ID."""
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 
@@ -454,6 +458,7 @@ def process_new_flight(name: str, session_id: str):
     return new_flight_id
     
 def get_nearest_city(latitude: float, longitude: float) -> str:
+    """Returns nearest city from given coordinates."""
     try:
         url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={latitude}&lon={longitude}&zoom=5"
         response = requests.get(url, headers={"User-Agent": "wildfire-status-app"})
@@ -468,6 +473,7 @@ def get_nearest_city(latitude: float, longitude: float) -> str:
         return "Unknown Location"
   
 def update_mission_data(export):
+    """Updates wildfires table with avionics integration data."""
     mission_time = export.get("time_stamp")
     gps_lat = export.get("latitude", 0.0) / 1e6
     gps_lon = export.get("longitude", 0.0) / 1e6
@@ -527,6 +533,7 @@ def update_mission_data(export):
 
 # Flight_id / Ulog Database
 def init_flights_db():
+    """Initialize Flights Table."""
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
     cursor.execute(
@@ -544,10 +551,8 @@ def init_flights_db():
     conn.commit()
     conn.close()
 
-import time
-import sqlite3
-
 def update_flights(flight_id, session_id, name, ulog_filename):
+    """Updates flights table each time a new packet is processed"""
     conn = sqlite3.connect("wildfire_data.db")
     cursor = conn.cursor()
 

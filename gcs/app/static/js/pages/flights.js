@@ -1,3 +1,4 @@
+// retrieves the list of all flights from the API endpoint
 async function fetchFlights() {
     const res = await fetch('/api/flights');
     if (!res.ok) {
@@ -6,6 +7,7 @@ async function fetchFlights() {
     return await res.json();
   }
   
+  // fetches detailed data for a given fire name and flight ID
   async function fetchFlightDetails(name, flightId) {
     const url = `/api/flights/${encodeURIComponent(name)}?flight_id=${flightId}`;
     const res = await fetch(url);
@@ -15,6 +17,7 @@ async function fetchFlights() {
     return await res.json();
   }
   
+  // calculate number of points, flight distance (km), and flight duration (mins)
   function computeMetrics(data) {
     if (!data.wildfire_data || data.wildfire_data.length < 2) return null;
   
@@ -47,6 +50,7 @@ async function fetchFlights() {
     };
   }
   
+  // create the clickable card element summarizing flight and computed metrics
   function createFlightCard(flight, metrics) {
     const card = document.createElement('div');
     card.className = 'card mb-3 card-hover';
@@ -83,6 +87,8 @@ async function fetchFlights() {
     return card;
   }
   
+  // main process
+  // fetches all flights, groups by fire name, retrieves details for each, computes metrics, and appends flight cards.
   async function renderFlights() {
     const flights = await fetchFlights();
     const container = document.getElementById('flights-container');
